@@ -72,7 +72,7 @@ private:
   state_t state;
 
   enum numstate_t {
-    NSTART, NMINUS, NZERO, NINT, NFRAC, NFRACMORE,
+    NSTART, NMINUS, NNZERO, NINT, NFRAC, NFRACMORE, // NZERO already used by some xopen headers
     NEXP, NEXPONE, NEXPMORE, NDONE
   };
   numstate_t numstate;

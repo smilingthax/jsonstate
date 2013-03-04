@@ -324,12 +324,12 @@ bool JsonState::nextNumstate(char ch) // {{{
   case NSTART:
     if (ch=='-')        { numstate=NMINUS; break; }
   case NMINUS:
-    if (ch=='0')        { numstate=NZERO; break; }
+    if (ch=='0')        { numstate=NNZERO; break; }
     if (is_digit(ch))   { numstate=NINT; break; }
     return false; // TODO? numstate=NERROR; break/continue;
   case NINT:
     if (is_digit(ch))   { break; }
-  case NZERO:
+  case NNZERO:
     if (ch=='.')        { numstate=NFRAC; break; }
   // NLOOKEXP:
     if ((ch|0x20)=='e') { numstate=NEXP; break; }

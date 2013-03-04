@@ -136,9 +136,6 @@ TBool(VALUE_NUMBER, ( (is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')||(ch=='e')
     gotValue(); // DONE, DICT_WAIT or ARRAY_WAIT now
     Echar(ch);  // allowed next: is_ws or ",}]"
   }
-  // TODO: when does a number end?
-    // FIXME: problem: done() has to return true early, if not in strict mode
-    // TRICK: feed extra ' ' to state tracker at end-of-number, to get 'next' state
 })
 
 TSwitch(STRING)

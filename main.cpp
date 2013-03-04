@@ -2,17 +2,6 @@
 #include <stdio.h>
 #include "jsonstate.h"
 
-// TODO: fix inStart()... getters
-
-// TODO: add option to only allow top-level array/dict  (strict mode)
-
-// loop over string (for testing)
-
-// refactor jsonout to use jsonstate
-
-// write json-'SAX'-parser using jsonstate (i.e. callbacks,
-//  they get only string)  ... implement value-validation in jsonstate
-
 bool check_json(const char *str) // {{{
 {
   assert(str);

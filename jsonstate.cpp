@@ -72,22 +72,23 @@ bool JsonState::is_hex(char c) const // {{{
 }
 // }}}
 
-#define TSkipBool(state,skipcond,cond,code,elsecode) template<> \
-                       void JsonState::inState<STATE_T::state>(char ch) { \
-                         if (skipcond) return; \
-                         if cond code else elsecode }
-#define TBool(state,cond,code,elsecode) TSkipBool(state,false,cond,code,elsecode)
+#define TF(state,code) template<> \
+              void JsonState::inState<STATE_T::state>(char ch) code
 
-#define TSkipSwitch(state,skipcond) template<> \
-                       void JsonState::inState<STATE_T::state>(char ch) { \
-                         if (skipcond) return; \
-                         switch (ch) {
-#define TSwitch(state) TSkipSwitch(state,false)
+#define TSkipBool(state,skipcond,cond,code,elsecode) \
+              TF(state,{ if (skipcond) return; \
+                         if cond code else elsecode })
+#define TBool(state,cond,code,elsecode) \
+              TF(state,{ if cond code else elsecode })
+
+#define TSkipSwitch(state,skipcond) \
+              TF(state,{ if (skipcond) return; \
+                         switch (ch) {)
+#define TSwitch(state) \
+              TF(state,{ switch (ch) {)
 #define TCase(char,code) case char: code; break;
 #define TEndSwitch(code) default: code; break; } }
 
-#define TF(state,code) template<> \
-            void JsonState::inState<STATE_T::state>(char ch) code
 
 TSkipSwitch(START, (is_ws(ch)))
 TCase('{', { stack.push_back(DICT); state=DICT_EMPTY; })

@@ -3,15 +3,6 @@
 
 #include <vector>
 
-#if defined(__GXX_EXPERIMENTAL_CXX0X__)||(__cplusplus>=201103L)
-namespace detail {
-
-template<int... S>
-struct seq { };
-
-} // namespace detail
-#endif
-
 class JsonState {
 public:
   JsonState();
@@ -52,24 +43,35 @@ private:
   // "Modes"
   bool isKey(type_t type) const { return (type==KEY_STRING)||(type==KEY_UNQUOTED); }
 
-  template<int State> void inState(int ch);
-#if defined(__GXX_EXPERIMENTAL_CXX0X__)||(__cplusplus>=201103L)
-  template<int... S> void callState(int ch,detail::seq<S...>);
-#endif
-
   bool nextNumstate(char ch);
+
 private:
   const char *err;
 
   std::vector<type_t> stack;
-  enum state_t { sSTART, sSTRICT_START, sDONE, // _START or ARRAY_START or DICT(VALUE)_START
-                 sVALUE_VERIFY, sVALUE_NUMBER,
-                 sSTRING, sSTRING_ESCAPE, sSTRING_VALIDATE_ESCAPE, // VALUE_ or KEY_
-                 sKEY_START, sKEY_UNQUOTED, sKEYDONE, // KEY_START actually has stack.push_back(KEY); delayed
-                 sDICT_EMPTY, sARRAY_EMPTY,
-                 sDICT_WAIT, sARRAY_WAIT,
-                 _MAX_STATE_T=sARRAY_WAIT};
-  state_t state;
+  void sSTART(int ch); // _START or ARRAY_START or DICT(VALUE)_START
+  void sSTRICT_START(int ch);
+  void sDONE(int ch);
+
+  void sVALUE_VERIFY(int ch);
+  void sVALUE_NUMBER(int ch);
+
+  void sSTRING(int ch); // VALUE_ or KEY_
+  void sSTRING_ESCAPE(int ch);
+  void sSTRING_VALIDATE_ESCAPE(int ch);
+
+  void sKEY_START(int ch); // KEY_START actually contains the (delayed)  gotStart(KEY_STRING)
+  void sKEY_UNQUOTED(int ch);
+  void sKEYDONE(int ch);
+
+  void sDICT_EMPTY(int ch);
+  void sARRAY_EMPTY(int ch);
+
+  void sDICT_WAIT(int ch);
+  void sARRAY_WAIT(int ch);
+
+  void (JsonState::*state)(int ch); // points to some &JsonState::sNAME
+  const char *stateDebug;
 
   enum numstate_t {
     NSTART, NMINUS, NNZERO, NINT, NFRAC, NFRACMORE, // NZERO already used by some xopen headers
@@ -82,11 +84,11 @@ private:
 };
 
 inline bool JsonState::inWait() const {
-  return (!err)&&( (state==sDICT_WAIT)||(state==sARRAY_WAIT) );
+  return (!err)&&( (state==&JsonState::sDICT_WAIT)||(state==&JsonState::sARRAY_WAIT) );
 }
 
 inline bool JsonState::done() const {
-  return (!err)&&(state==sDONE);
+  return (!err)&&(state==&JsonState::sDONE);
 }
 inline const char *JsonState::error() const {
   return err;

@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include "jsonstate.h"
 
+#include <string>
+
 bool check_json(const char *str) // {{{
 {
   assert(str);

@@ -22,53 +22,53 @@ public:
   bool validateNumbers;
 
   // Events
-  bool Echar(char ch); // false on error
+  bool Echar(int ch); // false on error
   bool Eend();   // needed to verify numbers and forbid empty string
   bool Ekey();   // optional shortcut for complete key
   bool Evalue(); // optional shortcut for complete value
 
   // States
-  bool inWait() const;    //  either ','+Value or '}' / ']' next
+  bool inWait() const;    //  either ','+Value or '}' / ']' expected next
 
   bool done() const;
   const char *error() const; // or NULL
 
   void reset(bool strictStart=false); // only Array/Dict, per RFC, if strict
 
-  // Helper
-  bool is_ws(char ch) const;
-  bool is_escape(char ch) const;
-  bool is_digit(char ch) const;
-  bool is_hex(char ch) const;
-
   void dump() const;
+
+  // Types
+  enum type_t {
+    ARRAY, OBJECT, // only these can be 'buried' in the stack (below the latest entry)
+    VALUE_STRING, VALUE_NUMBER, VALUE_BOOL, VALUE_NULL,
+    KEY_STRING,
+    KEY_UNQUOTED  // extension
+  };
+
 private:
+  void gotStart(type_t type);
   void gotValue();
 
-  template<int State> void inState(char ch);
+  // "Modes"
+  bool isKey(type_t type) const { return (type==KEY_STRING)||(type==KEY_UNQUOTED); }
+
+  template<int State> void inState(int ch);
 #if defined(__GXX_EXPERIMENTAL_CXX0X__)||(__cplusplus>=201103L)
-  template<int... S> void callState(char ch,detail::seq<S...>);
+  template<int... S> void callState(int ch,detail::seq<S...>);
 #endif
 
   bool nextNumstate(char ch);
 private:
   const char *err;
 
-  enum mode_t {
-    DICT,
-    ARRAY,
-    // only possible at the top:
-    KEY,
-    VALUE
-  };
-  std::vector<mode_t> stack;
-  enum state_t { START, STRICT_START, DONE, // _START or ARRAY_START or DICT(VALUE)_START
-                 VALUE_VERIFY, VALUE_NUMBER,
-                 STRING, STRING_ESCAPE, STRING_VALIDATE_ESCAPE, // VALUE_ or KEY_
-                 KEY_START, KEY_UNQUOTED, KEYDONE, // KEY_START actually has stack.push_back(KEY); delayed
-                 DICT_EMPTY, ARRAY_EMPTY,
-                 DICT_WAIT, ARRAY_WAIT,
-                 _MAX_STATE_T=ARRAY_WAIT};
+  std::vector<type_t> stack;
+  enum state_t { sSTART, sSTRICT_START, sDONE, // _START or ARRAY_START or DICT(VALUE)_START
+                 sVALUE_VERIFY, sVALUE_NUMBER,
+                 sSTRING, sSTRING_ESCAPE, sSTRING_VALIDATE_ESCAPE, // VALUE_ or KEY_
+                 sKEY_START, sKEY_UNQUOTED, sKEYDONE, // KEY_START actually has stack.push_back(KEY); delayed
+                 sDICT_EMPTY, sARRAY_EMPTY,
+                 sDICT_WAIT, sARRAY_WAIT,
+                 _MAX_STATE_T=sARRAY_WAIT};
   state_t state;
 
   enum numstate_t {
@@ -82,11 +82,11 @@ private:
 };
 
 inline bool JsonState::inWait() const {
-  return (!err)&&( (state==DICT_WAIT)||(state==ARRAY_WAIT) );
+  return (!err)&&( (state==sDICT_WAIT)||(state==sARRAY_WAIT) );
 }
 
 inline bool JsonState::done() const {
-  return (!err)&&(state==DONE);
+  return (!err)&&(state==sDONE);
 }
 inline const char *JsonState::error() const {
   return err;

@@ -2,6 +2,8 @@
 #include <assert.h>
 #include <stdio.h>
 
+#include "jsonchars.tcc"
+
 #if !defined(__GXX_EXPERIMENTAL_CXX0X__)&&(__cplusplus<201103L)
   #define nullptr NULL
   // can't use JsonState::state_t::state in C++03
@@ -29,7 +31,7 @@ JsonState::JsonState()
   : allowUnquotedKeys(false),
     validateEscapes(false),
     validateNumbers(false),
-    err(nullptr),state(START)
+    err(nullptr),state(sSTART)
 {
 }
 
@@ -38,42 +40,16 @@ void JsonState::reset(bool strictStart) // {{{
   err=nullptr;
   stack.clear();
   if (strictStart) {
-    state=STRICT_START;
+    state=sSTRICT_START;
   } else {
-    state=START;
+    state=sSTART;
   }
 }
 // }}}
 
-bool JsonState::is_ws(char c) const // {{{
-{
-  return ( (c==' ')||(c=='\r')||(c=='\n')||(c=='\t') );
-}
-// }}}
-
-bool JsonState::is_escape(char c) const // {{{
-{
-  return (c=='\\')||(c=='"')||(c=='\\')||(c=='/')||
-         (c=='b')||(c=='f')||(c=='n')||(c=='r')||(c=='t')||(c=='u');
-}
-// }}}
-
-bool JsonState::is_digit(char c) const // {{{
-{
-  return ( (c>='0')&&(c<='9') );
-}
-// }}}
-
-bool JsonState::is_hex(char c) const // {{{
-{
-  return ( (c>='0')&&(c<='9') )||
-         ( (c>='a')&&(c<='f') )||
-         ( (c>='A')&&(c<='F') );
-}
-// }}}
 
 #define TF(state,code) template<> \
-              void JsonState::inState<STATE_T::state>(char ch) code
+              void JsonState::inState<STATE_T::s ## state>(int ch) code
 
 #define TSkipBool(state,skipcond,cond,code,elsecode) \
               TF(state,{ if (skipcond) return; \
@@ -86,21 +62,21 @@ bool JsonState::is_hex(char c) const // {{{
                          switch (ch) {)
 #define TSwitch(state) \
               TF(state,{ switch (ch) {)
-#define TCase(char,code) case char: code; break;
+#define TCase(c,code) case c: code; break;
 #define TEndSwitch(code) default: code; break; } }
 
 
-TSkipSwitch(START, (is_ws(ch)))
-TCase('{', { stack.push_back(DICT); state=DICT_EMPTY; })
-TCase('[', { stack.push_back(ARRAY); state=ARRAY_EMPTY; })
-TCase('"', { stack.push_back(VALUE); state=STRING; })
-TCase('f', { stack.push_back(VALUE); state=VALUE_VERIFY; verify="alse"; })
-TCase('t', { stack.push_back(VALUE); state=VALUE_VERIFY; verify="rue"; })
-TCase('n', { stack.push_back(VALUE); state=VALUE_VERIFY; verify="ull"; })
+TSkipSwitch(START, (JsonChars::is_ws(ch)))
+TCase('{', { gotStart(OBJECT);       state=sDICT_EMPTY; })
+TCase('[', { gotStart(ARRAY);        state=sARRAY_EMPTY; })
+TCase('"', { gotStart(VALUE_STRING); state=sSTRING; })
+TCase('f', { gotStart(VALUE_BOOL);   state=sVALUE_VERIFY; verify="alse"; })
+TCase('t', { gotStart(VALUE_BOOL);   state=sVALUE_VERIFY; verify="rue"; })
+TCase('n', { gotStart(VALUE_NULL);   state=sVALUE_VERIFY; verify="ull"; })
 TEndSwitch({
-  if ( (ch=='-')||(is_digit(ch)) ) {
-    stack.push_back(VALUE);
-    state=VALUE_NUMBER;
+  if ( (ch=='-')||(JsonChars::is_digit(ch)) ) {
+    gotStart(VALUE_NUMBER);
+    state=sVALUE_NUMBER;
     if (validateNumbers) {
       numstate=NSTART;
       if (!nextNumstate(ch)) {
@@ -112,9 +88,9 @@ TEndSwitch({
   }
 })
 
-TSkipSwitch(STRICT_START, (is_ws(ch)))
-TCase('{', { stack.push_back(DICT); state=DICT_EMPTY; })
-TCase('[', { stack.push_back(ARRAY); state=ARRAY_EMPTY; })
+TSkipSwitch(STRICT_START, (JsonChars::is_ws(ch)))
+TCase('{', { gotStart(OBJECT); state=sDICT_EMPTY; })
+TCase('[', { gotStart(ARRAY); state=sARRAY_EMPTY; })
 TEndSwitch({
   err="Array or Object expected";
 })
@@ -126,7 +102,7 @@ TBool(VALUE_VERIFY, (ch==*verify), {
   }
 },{ err="Expected true/false/null keyword"; })
 
-TBool(VALUE_NUMBER, ( (is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')||(ch=='e')||(ch=='E') ), {
+TBool(VALUE_NUMBER, ( (JsonChars::is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')||(ch=='e')||(ch=='E') ), {
   if ( (validateNumbers)&&(!nextNumstate(ch)) ) {
     err="Invalid Number";
   }
@@ -140,40 +116,41 @@ TBool(VALUE_NUMBER, ( (is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')||(ch=='e')
 })
 
 TSwitch(STRING)
-TCase('\\',{ state=STRING_ESCAPE; })
+TCase('\\',{ state=sSTRING_ESCAPE; })
 TCase('"', { gotValue(); })
 TEndSwitch({ }) // TODO? check for valid chars?
 
 TF(STRING_ESCAPE, {
-  state=STRING;
+  state=sSTRING;
   if (validateEscapes) {
     if (ch=='u') {
-      state=STRING_VALIDATE_ESCAPE;
+      state=sSTRING_VALIDATE_ESCAPE;
       validate=4;
-    } else if (!is_escape(ch)) {
+    } else if (!JsonChars::is_escape(ch)) {
       err="Invalid escape";
     }
   }
 });
 
-TBool(STRING_VALIDATE_ESCAPE, (is_hex(ch)), {
+TBool(STRING_VALIDATE_ESCAPE, (JsonChars::is_hex(ch)), {
   validate--;
   if (!validate) {
-    state=STRING;
+    state=sSTRING;
   }
 },{ err="Invalid unicode escape"; })
 
-TSkipBool(KEY_START, (is_ws(ch)), (ch=='"'), {
-  stack.push_back(KEY);
-  state=STRING;
+TSkipBool(KEY_START, (JsonChars::is_ws(ch)), (ch=='"'), {
+  gotStart(KEY_STRING);
+  state=sSTRING;
+// (TODO? allowNumericKeys)
 } else if (allowUnquotedKeys) {
-  stack.push_back(KEY);
-  state=KEY_UNQUOTED;
+  gotStart(KEY_UNQUOTED);
+  state=sKEY_UNQUOTED;
 },{
   err="Expected dict key";
 })
 
-TBool(KEY_UNQUOTED, ( (is_ws(ch))||(ch==':') ), {
+TBool(KEY_UNQUOTED, ( (JsonChars::is_ws(ch))||(ch==':') ), {
   // TODO? synthesize '"'
   gotValue();
 },{
@@ -183,49 +160,55 @@ TBool(KEY_UNQUOTED, ( (is_ws(ch))||(ch==':') ), {
   }
 })
 
-TSkipBool(KEYDONE, (is_ws(ch)), (ch==':'), {
-  state=START; // DICTVALUE_START
+TSkipBool(KEYDONE, (JsonChars::is_ws(ch)), (ch==':'), {
+  state=sSTART; // DICTVALUE_START
 },{
   err="Expected ':' after key";
 })
 
-TSkipBool(DICT_EMPTY, (is_ws(ch)), (ch=='}'), {
+TSkipBool(DICT_EMPTY, (JsonChars::is_ws(ch)), (ch=='}'), {
   gotValue();
-},{ inState<KEY_START>(ch); }) // epsilon transition
+},{ inState<sKEY_START>(ch); }) // epsilon transition
 
-TSkipBool(ARRAY_EMPTY, (is_ws(ch)), (ch==']'), {
+TSkipBool(ARRAY_EMPTY, (JsonChars::is_ws(ch)), (ch==']'), {
   gotValue();
-},{ inState<START>(ch); }) // epsilon transition
+},{ inState<sSTART>(ch); }) // epsilon transition
 
-TSkipSwitch(DICT_WAIT, (is_ws(ch)))
-TCase(',', { state=KEY_START; })
+TSkipSwitch(DICT_WAIT, (JsonChars::is_ws(ch)))
+TCase(',', { state=sKEY_START; })
 TCase('}', { gotValue(); })
 TEndSwitch({ err="Expected ',' or '}'"; }) // "instead of [ch]"
 
-TSkipSwitch(ARRAY_WAIT, (is_ws(ch)))
-TCase(',', { state=START; })
+TSkipSwitch(ARRAY_WAIT, (JsonChars::is_ws(ch)))
+TCase(',', { state=sSTART; })
 TCase(']', { gotValue(); })
 TEndSwitch({ err="Expected ',' or ']'"; })
 
-TBool(DONE, (!is_ws(ch)), {
+TBool(DONE, (!JsonChars::is_ws(ch)), {
   err="Trailing character";
 },{ })
+
+void JsonState::gotStart(type_t type) // {{{
+{
+  stack.push_back(type);
+}
+// }}}
 
 void JsonState::gotValue() // {{{
 {
   assert( (!err)&&(!stack.empty()) );
-  const mode_t oldVal=stack.back();
+  const type_t oldVal=stack.back();
   stack.pop_back();
   if (stack.empty()) {
-    state=DONE;
-  } else if (oldVal==KEY) {
-    state=KEYDONE;
+    state=sDONE;
+  } else if (isKey(oldVal)) {
+    state=sKEYDONE;
   } else {
-    const mode_t val=stack.back();
-    if (val==DICT) {
-      state=DICT_WAIT;
+    const type_t val=stack.back();
+    if (val==OBJECT) {
+      state=sDICT_WAIT;
     } else if (val==ARRAY) {
-      state=ARRAY_WAIT;
+      state=sARRAY_WAIT;
     } else {
       assert(0);
       err="Internal error";
@@ -237,17 +220,17 @@ void JsonState::gotValue() // {{{
 // CPP11 trick: http://stackoverflow.com/questions/7381805/c-c11-switch-statement-for-variadic-templates
 #ifdef CPP11
 template<int... S>
-void JsonState::callState(char ch,detail::seq<S...>)
+void JsonState::callState(int ch,detail::seq<S...>)
 {
   static constexpr decltype(&JsonState::inState<0>) table[]={
-//  static constexpr void (JsonState::*table[])(char)={
+//  static constexpr void (JsonState::*table[])(int)={
     &JsonState::inState<S>...
   };
   (this->*table[state])(ch);
 }
 #endif
 
-bool JsonState::Echar(char ch) // {{{
+bool JsonState::Echar(int ch) // {{{
 {
   if (err) {
     return false;
@@ -281,7 +264,7 @@ bool JsonState::Echar(char ch) // {{{
 
 bool JsonState::Eend() // {{{
 {
-  if ( (Echar(' '))&&(state!=DONE) ) {
+  if ( (Echar(' '))&&(state!=sDONE) ) {
     err="Premature end of input";
   }
   return (!err);
@@ -291,8 +274,8 @@ bool JsonState::Eend() // {{{
 bool JsonState::Ekey() // {{{
 {
   if (!err) {
-    if ( (state==KEY_START)||(state==DICT_EMPTY) ) {
-      state=KEYDONE;
+    if ( (state==sKEY_START)||(state==sDICT_EMPTY) ) {
+      state=sKEYDONE;
     } else {
       err="Unexpected key";
     }
@@ -303,13 +286,25 @@ bool JsonState::Ekey() // {{{
 
 bool JsonState::Evalue() // {{{
 {
-  if ( (state==KEY_START)||(state==DICT_EMPTY) ) {
-    return Ekey();
-  }
   if (!err) {
-    if ( (state==START)||(state==ARRAY_EMPTY) ) {
+    if ( (state==sSTART)||(state==sARRAY_EMPTY) ) {
+      if (stack.empty()) {
+        state=sDONE;
+      } else {
+        const type_t val=stack.back();
+        if (val==OBJECT) {
+          state=sDICT_WAIT;
+        } else if (val==ARRAY) {
+          state=sARRAY_WAIT;
+        } else {
+          assert(0);
+          err="Internal error";
+        }
+      }
+/* or    [but incompatible, when gotValue fires events]
       stack.push_back(VALUE);
       gotValue();
+*/
     } else {
       err="Unexpected value";
     }
@@ -320,6 +315,7 @@ bool JsonState::Evalue() // {{{
 
 bool JsonState::nextNumstate(char ch) // {{{
 {
+  using JsonChars::is_digit;
   switch (numstate) {
   case NSTART:
     if (ch=='-')        { numstate=NMINUS; break; }
@@ -364,11 +360,11 @@ bool JsonState::nextNumstate(char ch) // {{{
 
 void JsonState::dump() const // {{{
 {
-  static const char *mode2str[]={"DICT","ARRAY","KEY","VALUE"};
+  static const char *type2str[]={"ARRAY", "OBJECT", "VALUE_STRING", "VALUE_NUMBER", "VALUE_BOOL", "VALUE_NULL", "KEY_STRING", "KEY_UNQUOTED"};
   // TODO? map state to string
   if (err) {
     printf("Error: %s (State: %d)\n",err,state);
-  } else if (state==DONE) {
+  } else if (state==sDONE) {
     puts("Done");
   } else {
     printf("State: %d, Stack: [",state);
@@ -376,9 +372,9 @@ void JsonState::dump() const // {{{
       if (iA) {
         putchar(',');
       }
-      printf("%s",mode2str[stack[iA]]);
+      printf("%s",type2str[stack[iA]]);
     }
-    if ( (state==VALUE_NUMBER)&&(validateNumbers) ) {
+    if ( (state==sVALUE_NUMBER)&&(validateNumbers) ) {
       printf("], Numstate: %d\n",numstate);
     } else {
       puts("]");

@@ -5,19 +5,23 @@
 bool check_json(const char *str) // {{{
 {
   assert(str);
+  const char *start=str;
+
   JsonState state;
   state.reset(true);
   state.validateNumbers=true;
 
-  int iA;
-  for (iA=0;*str;str++,iA++) {
+  int pos;
+  for (pos=0;*str;str++,pos++) {
     if (!state.Echar(*str)) {
-      fprintf(stderr,"Json error at %d: %s\n",iA,state.error());
-      return false;
+      break;
     }
   }
-  if (!state.Eend()) { // in case of numbers
-    fprintf(stderr,"Json error at %d: %s\n",iA,state.error());
+  if ( (*str)||(!state.Eend()) ) {
+    fprintf(stderr,"Json error at %d: %s\n",pos,state.error());
+    const int prelen=std::min(str-start,20);
+    fprintf(stderr,"Context: \"%.*s\"\n",prelen+20,str-prelen);
+    fprintf(stderr,"      %s----^\n",std::string(prelen,' ').c_str());
     return false;
   }
   return true;

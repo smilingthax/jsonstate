@@ -6,23 +6,184 @@
 
 #if !defined(__GXX_EXPERIMENTAL_CXX0X__)&&(__cplusplus<201103L)
   #define nullptr NULL
-  // can't use JsonState::state_t::state in C++03
-  #define STATE_T JsonState
+  // can't use JsonState::type_t::type in C++03
+  #define TYPE_T JsonState
 #else
-  #define STATE_T JsonState::state_t
+  #define TYPE_T JsonState::type_t
 #endif
 
+#ifdef NDEBUG
+#define NDBG(code)
+#else
+#define NDBG(code) code
+#endif
+
+#define T_(newState) s.state=JsonState::Trans::newState; NDBG(s.stateDebug=#newState;) return true
+#define T_Error(e)   s.err=e; return false
+#define T_Stay       return true
+
+#define TF(state,code) static bool state(JsonState &s,int ch) code
+
+#define TBool(state,cond,code,elsecode) \
+              TF(state,{ if cond code else elsecode })
+#define TSkipBool(state,cond,code,elsecode) \
+              TF(state,{ if (JsonChars::is_ws(ch)) { T_Stay; } \
+                         if cond code else elsecode })
+
+// extra braces in switch are ok... (and post-function code needs single macro)
+#define TSwitch(state,code,defcode) \
+              TF(state,{ switch (ch) { code \
+                         default: defcode; break; } })
+#define TSkipSwitch(state,code,defcode) \
+              TF(state,{ if (JsonChars::is_ws(ch)) { T_Stay; } \
+                         switch (ch) { code \
+                         default: defcode; break; } })
+
+
+struct JsonState::Trans { // inner class is implicit friend
+
+TSkipSwitch(START, {
+case '{': s.gotStart(OBJECT);       T_(DICT_EMPTY);
+case '[': s.gotStart(ARRAY);        T_(ARRAY_EMPTY);
+case '"': s.gotStart(VALUE_STRING); T_(STRING);
+case 'f': s.gotStart(VALUE_BOOL); s.verify="alse"; T_(VALUE_VERIFY);
+case 't': s.gotStart(VALUE_BOOL); s.verify="rue";  T_(VALUE_VERIFY);
+case 'n': s.gotStart(VALUE_NULL); s.verify="ull";  T_(VALUE_VERIFY);
+},{
+  if ( (ch=='-')||(JsonChars::is_digit(ch)) ) {
+    s.gotStart(TYPE_T::VALUE_NUMBER);
+    if (s.validateNumbers) {
+      s.numstate=NSTART;
+      if (!s.nextNumstate(ch)) {
+        T_Error("Invalid Number");
+      }
+    }
+    T_(VALUE_NUMBER);
+  }
+  T_Error("Unexpected character (not {,[,\",t,f,n,0-9)");
+})
+
+TSkipSwitch(STRICT_START, {
+case '{': s.gotStart(OBJECT); T_(DICT_EMPTY);
+case '[': s.gotStart(ARRAY);  T_(ARRAY_EMPTY);
+},{ T_Error("Array or Object expected"); })
+
+TBool(VALUE_VERIFY, (ch==*s.verify), {
+  s.verify++;
+  if (!*s.verify) {
+    return s.gotValue();
+  }
+  T_Stay;
+},{ T_Error("Expected true/false/null keyword"); })
+
+TBool(VALUE_NUMBER, ( (JsonChars::is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')||(ch=='e')||(ch=='E') ), {
+  if ( (s.validateNumbers)&&(!s.nextNumstate(ch)) ) {
+    T_Error("Invalid Number");
+  }
+  T_Stay;
+},{
+  if ( (s.validateNumbers)&&(s.numstate!=NDONE)&&(!s.nextNumstate(0)) ) {
+    T_Error("Premature end of number");
+  }
+  // epsilon transition - TODO?
+  return (s.gotValue())&& // DONE, DICT_WAIT or ARRAY_WAIT now
+         (s.Echar(ch));   // allowed next: is_ws or ",}]"
+})
+
+TSwitch(STRING, {
+case '\\': T_(STRING_ESCAPE);
+case '"':  return s.gotValue();
+},{ T_Stay; }) // TODO? check for valid chars?
+
+TF(STRING_ESCAPE, {
+  if (s.validateEscapes) {
+    if (ch=='u') {
+      s.validate=4;
+      T_(STRING_VALIDATE_ESCAPE);
+    } else if (!JsonChars::is_escape(ch)) {
+      T_Error("Invalid escape");
+    } // else: fall through
+  }
+  T_(STRING);
+});
+
+TBool(STRING_VALIDATE_ESCAPE, (JsonChars::is_hex(ch)), {
+  s.validate--;
+  if (!s.validate) {
+    T_(STRING);
+  }
+  T_Stay;
+},{ T_Error("Invalid unicode escape"); })
+
+TSkipBool(KEY_START, (ch=='"'), {
+  s.gotStart(KEY_STRING);
+  T_(STRING);
+// (TODO? allowNumericKeys)
+},{
+  if (s.allowUnquotedKeys) {
+    s.gotStart(TYPE_T::KEY_UNQUOTED);
+    T_(KEY_UNQUOTED);
+  }
+  T_Error("Expected dict key");
+})
+
+TBool(KEY_UNQUOTED, ( (JsonChars::is_ws(ch))||(ch==':') ), {
+  // TODO? synthesize '"'
+  return s.gotValue();
+},{
+  if (ch=='\\') {
+    // BAD... TODO? synthesize another '\\'
+    T_Error("Bad unquoted key");
+  }
+  T_Stay;
+})
+
+TSkipBool(KEYDONE, (ch==':'), {
+  T_(START); // DICTVALUE_START
+},{ T_Error("Expected ':' after key"); })
+
+TSkipBool(DICT_EMPTY, (ch=='}'), {
+  return s.gotValue();
+},{ return KEY_START(s,ch); }) // epsilon transition
+
+TSkipBool(ARRAY_EMPTY, (ch==']'), {
+  return s.gotValue();
+},{ return START(s,ch); }) // epsilon transition
+
+TSkipSwitch(DICT_WAIT, {
+case ',': T_(KEY_START);
+case '}': return s.gotValue();
+},{ T_Error("Expected ',' or '}'"); }) // "instead of [ch]"
+
+TSkipSwitch(ARRAY_WAIT, {
+case ',': T_(START);
+case ']': return s.gotValue();
+},{ T_Error("Expected ',' or ']'"); })
+
+TSkipBool(DONE, (true), {
+  T_Error("Trailing character");
+},{ })
+
+}; // struct JsonState::Trans
+
+#define To(newState) state=JsonState::Trans::newState; NDBG(stateDebug=#newState)
+#define In(otherState) (state==JsonState::Trans::otherState)
 
 JsonState::JsonState()
   : allowUnquotedKeys(false),
     validateEscapes(false),
     validateNumbers(false),
-    err(nullptr),state(&JsonState::sSTART),stateDebug("START")
+    err(nullptr),state(JsonState::Trans::START),stateDebug(NDBG("START"))
 {
 }
 
-#define To(newState) state=&JsonState::s ## newState; stateDebug=#newState
-#define In(otherState) (state==&JsonState::s ## otherState)
+bool JsonState::inWait() const {
+  return (!err)&&( In(DICT_WAIT)||In(ARRAY_WAIT) );
+}
+
+bool JsonState::done() const {
+  return (!err)&&(In(DONE));
+}
 
 void JsonState::reset(bool strictStart) // {{{
 {
@@ -37,152 +198,19 @@ void JsonState::reset(bool strictStart) // {{{
 // }}}
 
 
-#define TF(state,code) void JsonState::s ## state(int ch) code
-
-#define TSkipBool(state,skipcond,cond,code,elsecode) \
-              TF(state,{ if (skipcond) return; \
-                         if cond code else elsecode })
-#define TBool(state,cond,code,elsecode) \
-              TF(state,{ if cond code else elsecode })
-
-// extra braces in switch are ok... (and post-function code needs single macro)
-#define TSkipSwitch(state,skipcond,code,defcode) \
-              TF(state,{ if (skipcond) return; \
-                         switch (ch) { code \
-                         default: defcode; break; } })
-#define TSwitch(state,code,defcode) \
-              TF(state,{ switch (ch) { code \
-                         default: defcode; break; } })
-
-TSkipSwitch(START, (JsonChars::is_ws(ch)), {
-case '{': gotStart(OBJECT);       To(DICT_EMPTY);  break;
-case '[': gotStart(ARRAY);        To(ARRAY_EMPTY); break;
-case '"': gotStart(VALUE_STRING); To(STRING);      break;
-case 'f': gotStart(VALUE_BOOL);   To(VALUE_VERIFY); verify="alse"; break;
-case 't': gotStart(VALUE_BOOL);   To(VALUE_VERIFY); verify="rue";  break;
-case 'n': gotStart(VALUE_NULL);   To(VALUE_VERIFY); verify="ull";  break;
-},{
-  if ( (ch=='-')||(JsonChars::is_digit(ch)) ) {
-    gotStart(VALUE_NUMBER);
-    To(VALUE_NUMBER);
-    if (validateNumbers) {
-      numstate=NSTART;
-      if (!nextNumstate(ch)) {
-        err="Invalid Number";
-      }
-    }
-  } else {
-    err="Unexpected character"; // TODO output ch?
-  }
-})
-
-TSkipSwitch(STRICT_START, (JsonChars::is_ws(ch)), {
-case '{': gotStart(OBJECT); To(DICT_EMPTY);  break;
-case '[': gotStart(ARRAY);  To(ARRAY_EMPTY); break;
-},{
-  err="Array or Object expected";
-})
-
-TBool(VALUE_VERIFY, (ch==*verify), {
-  verify++;
-  if (!*verify) {
-    gotValue();
-  }
-},{ err="Expected true/false/null keyword"; })
-
-TBool(VALUE_NUMBER, ( (JsonChars::is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')||(ch=='e')||(ch=='E') ), {
-  if ( (validateNumbers)&&(!nextNumstate(ch)) ) {
-    err="Invalid Number";
-  }
-},{
-  if ( (validateNumbers)&&(numstate!=NDONE)&&(!nextNumstate(0)) ) {
-    err="Premature end of number";
-  } else {
-    gotValue(); // DONE, DICT_WAIT or ARRAY_WAIT now
-    Echar(ch);  // allowed next: is_ws or ",}]"
-  }
-})
-
-TSwitch(STRING, {
-case '\\': To(STRING_ESCAPE); break;
-case '"':  gotValue();        break;
-},{ }) // TODO? check for valid chars?
-
-TF(STRING_ESCAPE, {
-  To(STRING);
-  if (validateEscapes) {
-    if (ch=='u') {
-      To(STRING_VALIDATE_ESCAPE);
-      validate=4;
-    } else if (!JsonChars::is_escape(ch)) {
-      err="Invalid escape";
-    }
-  }
-});
-
-TBool(STRING_VALIDATE_ESCAPE, (JsonChars::is_hex(ch)), {
-  validate--;
-  if (!validate) {
-    To(STRING);
-  }
-},{ err="Invalid unicode escape"; })
-
-TSkipBool(KEY_START, (JsonChars::is_ws(ch)), (ch=='"'), {
-  gotStart(KEY_STRING);
-  To(STRING);
-// (TODO? allowNumericKeys)
-} else if (allowUnquotedKeys) {
-  gotStart(KEY_UNQUOTED);
-  To(KEY_UNQUOTED);
-},{
-  err="Expected dict key";
-})
-
-TBool(KEY_UNQUOTED, ( (JsonChars::is_ws(ch))||(ch==':') ), {
-  // TODO? synthesize '"'
-  gotValue();
-},{
-  if (ch=='\\') {
-    // BAD... TODO? synthesize another '\\'
-    err="Bad unquoted key";
-  }
-})
-
-TSkipBool(KEYDONE, (JsonChars::is_ws(ch)), (ch==':'), {
-  To(START); // DICTVALUE_START
-},{
-  err="Expected ':' after key";
-})
-
-TSkipBool(DICT_EMPTY, (JsonChars::is_ws(ch)), (ch=='}'), {
-  gotValue();
-},{ sKEY_START(ch); }) // epsilon transition
-
-TSkipBool(ARRAY_EMPTY, (JsonChars::is_ws(ch)), (ch==']'), {
-  gotValue();
-},{ sSTART(ch); }) // epsilon transition
-
-TSkipSwitch(DICT_WAIT, (JsonChars::is_ws(ch)), {
-case ',': To(KEY_START); break;
-case '}': gotValue();    break;
-},{ err="Expected ',' or '}'"; }) // "instead of [ch]"
-
-TSkipSwitch(ARRAY_WAIT, (JsonChars::is_ws(ch)), {
-case ',': To(START);  break;
-case ']': gotValue(); break;
-},{ err="Expected ',' or ']'"; })
-
-TBool(DONE, (!JsonChars::is_ws(ch)), {
-  err="Trailing character";
-},{ })
-
 void JsonState::gotStart(type_t type) // {{{
 {
   stack.push_back(type);
 }
 // }}}
 
-void JsonState::gotValue() // {{{
+static inline bool isKey(JsonState::type_t type) // {{{
+{
+  return (type==TYPE_T::KEY_STRING)||(type==TYPE_T::KEY_UNQUOTED);
+}
+// }}}
+
+bool JsonState::gotValue() // {{{
 {
   assert( (!err)&&(!stack.empty()) );
   const type_t oldVal=stack.back();
@@ -202,6 +230,7 @@ void JsonState::gotValue() // {{{
       err="Internal error";
     }
   }
+  return (!err);
 }
 // }}}
 
@@ -212,15 +241,15 @@ bool JsonState::Echar(int ch) // {{{
     return false;
   }
   // assert(state);
-  (this->*state)(ch);
-
-  return (!err);
+// bool res=(*state)(*this,ch);  if (!res)&&(!err) epsilon transition!
+  return (*state)(*this,ch);
+  // assert( (return==true) || err );
 }
 // }}}
 
 bool JsonState::Eend() // {{{
 {
-  if ( (Echar(' '))&&(!In(DONE)) ) { // TODO? ' ' produces "better" error message (but is not recoverable)
+  if ( (!err)&&(Echar(' '))&&(!In(DONE)) ) { // TODO? ' ' produces "better" error message (but is not recoverable)
     err="Premature end of input";
   }
   return (!err);
@@ -318,23 +347,28 @@ void JsonState::dump() const // {{{
 {
   static const char *type2str[]={"ARRAY", "OBJECT", "VALUE_STRING", "VALUE_NUMBER", "VALUE_BOOL", "VALUE_NULL", "KEY_STRING", "KEY_UNQUOTED"};
   // TODO? map state to string
-  if (err) {
-    printf("Error: %s (State: %s)\n",err,stateDebug);
-  } else if (In(DONE)) {
+  if ( (!err)&&(In(DONE)) ) {
     puts("Done");
+    return;
+  }
+  if (err) {
+    printf("Error: %s\n",err);
+  }
+#ifdef NDEBUG
+  printf("State: %p, Stack: [",state);
+#else
+  printf("State: %s, Stack: [",stateDebug);
+#endif
+  for (size_t iA=0;iA<stack.size();iA++) {
+   if (iA) {
+      putchar(',');
+    }
+    printf("%s",type2str[stack[iA]]);
+  }
+  if ( In(VALUE_NUMBER)&&(validateNumbers) ) {
+    printf("], Numstate: %d\n",numstate);
   } else {
-    printf("State: %s, Stack: [",stateDebug);
-    for (size_t iA=0;iA<stack.size();iA++) {
-      if (iA) {
-        putchar(',');
-      }
-      printf("%s",type2str[stack[iA]]);
-    }
-    if ( In(VALUE_NUMBER)&&(validateNumbers) ) {
-      printf("], Numstate: %d\n",numstate);
-    } else {
-      puts("]");
-    }
+    puts("]");
   }
 }
 // }}}

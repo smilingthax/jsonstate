@@ -22,7 +22,7 @@ bool check_json(const char *str) // {{{
   if ( (*str)||(!state.Eend()) ) {
     fprintf(stderr,"Json error at %d: %s\n",pos,state.error());
     const int prelen=std::min(str-start,20);
-    fprintf(stderr,"Context: \"%.*s\"\n",prelen+20,str-prelen);
+    fprintf(stderr,"Context: '%.*s'\n",prelen+20,str-prelen);
     fprintf(stderr,"      %s----^\n",std::string(prelen,' ').c_str());
     return false;
   }

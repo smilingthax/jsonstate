@@ -45,23 +45,23 @@ void JsonState::reset(bool strictStart) // {{{
 #define TBool(state,cond,code,elsecode) \
               TF(state,{ if cond code else elsecode })
 
-#define TSkipSwitch(state,skipcond) \
+// extra braces in switch are ok... (and post-function code needs single macro)
+#define TSkipSwitch(state,skipcond,code,defcode) \
               TF(state,{ if (skipcond) return; \
-                         switch (ch) {)
-#define TSwitch(state) \
-              TF(state,{ switch (ch) {)
-#define TCase(c,code) case c: code; break;
-#define TEndSwitch(code) default: code; break; } }
+                         switch (ch) { code \
+                         default: defcode; break; } })
+#define TSwitch(state,code,defcode) \
+              TF(state,{ switch (ch) { code \
+                         default: defcode; break; } })
 
-
-TSkipSwitch(START, (JsonChars::is_ws(ch)))
-TCase('{', { gotStart(OBJECT);       To(DICT_EMPTY); })
-TCase('[', { gotStart(ARRAY);        To(ARRAY_EMPTY); })
-TCase('"', { gotStart(VALUE_STRING); To(STRING); })
-TCase('f', { gotStart(VALUE_BOOL);   To(VALUE_VERIFY); verify="alse"; })
-TCase('t', { gotStart(VALUE_BOOL);   To(VALUE_VERIFY); verify="rue"; })
-TCase('n', { gotStart(VALUE_NULL);   To(VALUE_VERIFY); verify="ull"; })
-TEndSwitch({
+TSkipSwitch(START, (JsonChars::is_ws(ch)), {
+case '{': gotStart(OBJECT);       To(DICT_EMPTY);  break;
+case '[': gotStart(ARRAY);        To(ARRAY_EMPTY); break;
+case '"': gotStart(VALUE_STRING); To(STRING);      break;
+case 'f': gotStart(VALUE_BOOL);   To(VALUE_VERIFY); verify="alse"; break;
+case 't': gotStart(VALUE_BOOL);   To(VALUE_VERIFY); verify="rue";  break;
+case 'n': gotStart(VALUE_NULL);   To(VALUE_VERIFY); verify="ull";  break;
+},{
   if ( (ch=='-')||(JsonChars::is_digit(ch)) ) {
     gotStart(VALUE_NUMBER);
     To(VALUE_NUMBER);
@@ -76,10 +76,10 @@ TEndSwitch({
   }
 })
 
-TSkipSwitch(STRICT_START, (JsonChars::is_ws(ch)))
-TCase('{', { gotStart(OBJECT); To(DICT_EMPTY); })
-TCase('[', { gotStart(ARRAY);  To(ARRAY_EMPTY); })
-TEndSwitch({
+TSkipSwitch(STRICT_START, (JsonChars::is_ws(ch)), {
+case '{': gotStart(OBJECT); To(DICT_EMPTY);  break;
+case '[': gotStart(ARRAY);  To(ARRAY_EMPTY); break;
+},{
   err="Array or Object expected";
 })
 
@@ -103,10 +103,10 @@ TBool(VALUE_NUMBER, ( (JsonChars::is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')
   }
 })
 
-TSwitch(STRING)
-TCase('\\',{ To(STRING_ESCAPE); })
-TCase('"', { gotValue(); })
-TEndSwitch({ }) // TODO? check for valid chars?
+TSwitch(STRING, {
+case '\\': To(STRING_ESCAPE); break;
+case '"':  gotValue();        break;
+},{ }) // TODO? check for valid chars?
 
 TF(STRING_ESCAPE, {
   To(STRING);
@@ -162,15 +162,15 @@ TSkipBool(ARRAY_EMPTY, (JsonChars::is_ws(ch)), (ch==']'), {
   gotValue();
 },{ sSTART(ch); }) // epsilon transition
 
-TSkipSwitch(DICT_WAIT, (JsonChars::is_ws(ch)))
-TCase(',', { To(KEY_START); })
-TCase('}', { gotValue(); })
-TEndSwitch({ err="Expected ',' or '}'"; }) // "instead of [ch]"
+TSkipSwitch(DICT_WAIT, (JsonChars::is_ws(ch)), {
+case ',': To(KEY_START); break;
+case '}': gotValue();    break;
+},{ err="Expected ',' or '}'"; }) // "instead of [ch]"
 
-TSkipSwitch(ARRAY_WAIT, (JsonChars::is_ws(ch)))
-TCase(',', { To(START); })
-TCase(']', { gotValue(); })
-TEndSwitch({ err="Expected ',' or ']'"; })
+TSkipSwitch(ARRAY_WAIT, (JsonChars::is_ws(ch)), {
+case ',': To(START);  break;
+case ']': gotValue(); break;
+},{ err="Expected ',' or ']'"; })
 
 TBool(DONE, (!JsonChars::is_ws(ch)), {
   err="Trailing character";

@@ -169,19 +169,13 @@ TSkipBool(DONE, (true), {
 #define To(newState) state=JsonState::Trans::newState; NDBG(stateDebug=#newState)
 #define In(otherState) (state==JsonState::Trans::otherState)
 
-JsonState::JsonState()
-  : allowUnquotedKeys(false),
-    validateEscapes(false),
-    validateNumbers(false),
-    err(nullptr),state(JsonState::Trans::START),stateDebug(NDBG("START"))
+bool JsonState::inWait() const
 {
-}
-
-bool JsonState::inWait() const {
   return (!err)&&( In(DICT_WAIT)||In(ARRAY_WAIT) );
 }
 
-bool JsonState::done() const {
+bool JsonState::done() const
+{
   return (!err)&&(In(DONE));
 }
 
@@ -241,7 +235,6 @@ bool JsonState::Echar(int ch) // {{{
     return false;
   }
   // assert(state);
-// bool res=(*state)(*this,ch);  if (!res)&&(!err) epsilon transition!
   return (*state)(*this,ch);
   // assert( (return==true) || err );
 }
@@ -343,10 +336,15 @@ bool JsonState::nextNumstate(char ch) // {{{
 }
 // }}}
 
-void JsonState::dump() const // {{{
+const char *JsonState::typeName(JsonState::type_t type) // {{{
 {
   static const char *type2str[]={"ARRAY", "OBJECT", "VALUE_STRING", "VALUE_NUMBER", "VALUE_BOOL", "VALUE_NULL", "KEY_STRING", "KEY_UNQUOTED"};
-  // TODO? map state to string
+  return type2str[type];
+}
+// }}}
+
+void JsonState::dump() const // {{{
+{
   if ( (!err)&&(In(DONE)) ) {
     puts("Done");
     return;
@@ -363,7 +361,7 @@ void JsonState::dump() const // {{{
    if (iA) {
       putchar(',');
     }
-    printf("%s",type2str[stack[iA]]);
+    printf("%s",typeName(stack[iA]));
   }
   if ( In(VALUE_NUMBER)&&(validateNumbers) ) {
     printf("], Numstate: %d\n",numstate);

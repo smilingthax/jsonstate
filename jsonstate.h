@@ -5,7 +5,13 @@
 
 class JsonState {
 public:
-  JsonState();
+  JsonState()
+    : allowUnquotedKeys(false),
+      validateEscapes(false),
+      validateNumbers(false)
+  {
+    reset();
+  }
 
   // Options, not affected by reset()
   bool allowUnquotedKeys;
@@ -22,7 +28,9 @@ public:
   bool inWait() const;    //  either ','+Value or '}' / ']' expected next
 
   bool done() const;
-  const char *error() const; // or NULL
+  const char *error() const { // or NULL
+    return err;
+  }
 
   void reset(bool strictStart=false); // only Array/Dict, per RFC, if strict
 
@@ -35,6 +43,7 @@ public:
     KEY_STRING,
     KEY_UNQUOTED  // extension
   };
+  static const char *typeName(type_t type);
 
 private:
   void gotStart(type_t type);
@@ -60,10 +69,5 @@ private:
   int validate;
   const char *verify;
 };
-
-
-inline const char *JsonState::error() const {
-  return err;
-}
 
 #endif

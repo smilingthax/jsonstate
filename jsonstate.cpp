@@ -22,6 +22,7 @@ JsonState::JsonState()
 }
 
 #define To(newState) state=&JsonState::s ## newState; stateDebug=#newState
+#define In(otherState) (state==&JsonState::s ## otherState)
 
 void JsonState::reset(bool strictStart) // {{{
 {
@@ -219,7 +220,7 @@ bool JsonState::Echar(int ch) // {{{
 
 bool JsonState::Eend() // {{{
 {
-  if ( (Echar(' '))&&(state!=&JsonState::sDONE) ) { // TODO? ' ' produces "better" error message (but is not recoverable)
+  if ( (Echar(' '))&&(!In(DONE)) ) { // TODO? ' ' produces "better" error message (but is not recoverable)
     err="Premature end of input";
   }
   return (!err);
@@ -229,7 +230,7 @@ bool JsonState::Eend() // {{{
 bool JsonState::Ekey() // {{{
 {
   if (!err) {
-    if ( (state==&JsonState::sKEY_START)||(state==&JsonState::sDICT_EMPTY) ) {
+    if ( In(KEY_START)||In(DICT_EMPTY) ) {
       To(KEYDONE);
     } else {
       err="Unexpected key";
@@ -242,7 +243,7 @@ bool JsonState::Ekey() // {{{
 bool JsonState::Evalue() // {{{
 {
   if (!err) {
-    if ( (state==&JsonState::sSTART)||(state==&JsonState::sARRAY_EMPTY) ) {
+    if ( In(START)||In(ARRAY_EMPTY) ) {
       if (stack.empty()) {
         To(DONE);
       } else {
@@ -319,7 +320,7 @@ void JsonState::dump() const // {{{
   // TODO? map state to string
   if (err) {
     printf("Error: %s (State: %s)\n",err,stateDebug);
-  } else if (state==&JsonState::sDONE) {
+  } else if (In(DONE)) {
     puts("Done");
   } else {
     printf("State: %s, Stack: [",stateDebug);
@@ -329,7 +330,7 @@ void JsonState::dump() const // {{{
       }
       printf("%s",type2str[stack[iA]]);
     }
-    if ( (state==&JsonState::sVALUE_NUMBER)&&(validateNumbers) ) {
+    if ( In(VALUE_NUMBER)&&(validateNumbers) ) {
       printf("], Numstate: %d\n",numstate);
     } else {
       puts("]");

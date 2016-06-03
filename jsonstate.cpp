@@ -224,12 +224,21 @@ void JsonState::reset(bool strictStart) // {{{
 }
 // }}}
 
+void JsonState::setListener(EventListenerBase *listen) // {{{
+{
+  fire=listen;
+}
+// }}}
+
 
 // called from START, STRICT_START, KEY_START
 // and (via epsilon) from DICT_EMPTY, ARRAY_EMPTY
 void JsonState::gotStart(type_t type) // {{{
 {
   stack.push_back(type);
+  if (fire) {
+    fire->startValue(*this,type);
+  }
 }
 // }}}
 
@@ -238,6 +247,9 @@ JsonState::type_t JsonState::gotValue() // {{{
   assert( (!err)&&(!stack.empty()) );
   const type_t prevType=stack.back();
   stack.pop_back();
+  if (fire) {
+    fire->endValue(*this,prevType);
+  }
   return prevType;
 }
 // }}}

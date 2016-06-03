@@ -8,7 +8,8 @@ public:
   JsonState()
     : allowUnquotedKeys(false),
       validateEscapes(false),
-      validateNumbers(false)
+      validateNumbers(false),
+      fire()
   {
     reset();
   }
@@ -17,6 +18,9 @@ public:
   bool allowUnquotedKeys;
   bool validateEscapes;
   bool validateNumbers;
+
+  struct EventListenerBase;
+  void setListener(EventListenerBase *elb); // or NULL
 
   // Events
   bool Echar(int ch); // false on error
@@ -52,6 +56,7 @@ private:
   type_t gotValue();
 
   bool nextNumstate(char ch);
+  EventListenerBase *fire;
 
 private:
   const char *err;
@@ -72,6 +77,16 @@ private:
 
   int validate;        // by Trans::STRING_VALIDATE_ESCAPE
   const char *verify;  // by Trans::VALUE_VERIFY
+};
+
+struct JsonState::EventListenerBase { // abstract interface
+  virtual ~EventListenerBase() {}
+
+  // triggered before new state is entered (after stack is updated)
+  virtual void startValue(JsonState &state,JsonState::type_t type)=0;
+
+  // triggered before ending state is left (after stack is updated)
+  virtual void endValue(JsonState &state,JsonState::type_t type)=0;
 };
 
 #endif

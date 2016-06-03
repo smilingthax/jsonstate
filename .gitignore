@@ -1,3 +1,5 @@
 *.d
 *.o
 tst_jsonstate
+tests/*.json
+tests/test

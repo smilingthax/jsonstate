@@ -52,7 +52,7 @@ public:
   static const char *typeName(type_t type);
 
 private:
-  void gotStart(type_t type);
+  bool gotStart(type_t type);
   type_t gotValue();
 
   bool nextNumstate(char ch);

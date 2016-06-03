@@ -42,20 +42,21 @@
                          switch (ch) { code \
                          default: defcode; break; } })
 
+#define Try(x)  if (!(x)) return false;
 
 struct JsonState::Trans { // inner class is implicit friend
 
 TSkipSwitch(START, {
-case '{': s.gotStart(OBJECT); s.first=true; T_(DICT_EMPTY);
-case '[': s.gotStart(ARRAY);  s.first=true; T_(ARRAY_EMPTY);
-case '"': s.gotStart(VALUE_STRING); T_(STRING);
-case 'f': s.gotStart(VALUE_FALSE); s.verify="alse"; T_(VALUE_VERIFY);
-case 't': s.gotStart(VALUE_TRUE);  s.verify="rue";  T_(VALUE_VERIFY);
-case 'n': s.gotStart(VALUE_NULL);  s.verify="ull";  T_(VALUE_VERIFY);
+case '{': Try(s.gotStart(OBJECT)); s.first=true; T_(DICT_EMPTY);
+case '[': Try(s.gotStart(ARRAY));  s.first=true; T_(ARRAY_EMPTY);
+case '"': Try(s.gotStart(VALUE_STRING)); T_(STRING);
+case 'f': Try(s.gotStart(VALUE_FALSE)); s.verify="alse"; T_(VALUE_VERIFY);
+case 't': Try(s.gotStart(VALUE_TRUE));  s.verify="rue";  T_(VALUE_VERIFY);
+case 'n': Try(s.gotStart(VALUE_NULL));  s.verify="ull";  T_(VALUE_VERIFY);
 },{
   if ( (ch=='-')||(JsonChars::is_digit(ch)) ) {
-    s.gotStart(TYPE_T::VALUE_NUMBER);
-    if ( (!s.err)&&(s.validateNumbers) ) {
+    Try(s.gotStart(TYPE_T::VALUE_NUMBER));
+    if (s.validateNumbers) {
       s.numstate=NSTART;
       if (!s.nextNumstate(ch)) {
         T_Error("Invalid Number");
@@ -67,8 +68,8 @@ case 'n': s.gotStart(VALUE_NULL);  s.verify="ull";  T_(VALUE_VERIFY);
 })
 
 TSkipSwitch(STRICT_START, {
-case '{': s.gotStart(OBJECT); s.first=true; T_(DICT_EMPTY);
-case '[': s.gotStart(ARRAY);  s.first=true; T_(ARRAY_EMPTY);
+case '{': Try(s.gotStart(OBJECT)); s.first=true; T_(DICT_EMPTY);
+case '[': Try(s.gotStart(ARRAY));  s.first=true; T_(ARRAY_EMPTY);
 },{ T_Error("Array or Object expected"); })
 
 TBool(VALUE_VERIFY, (ch==*s.verify), {
@@ -125,12 +126,12 @@ TBool(STRING_VALIDATE_ESCAPE, (JsonChars::is_hex(ch)), {
 },{ T_Error("Invalid unicode escape"); })
 
 TSkipBool(KEY_START, (ch=='"'), {
-  s.gotStart(KEY_STRING);
+  Try(s.gotStart(KEY_STRING));
   T_(STRING);
 },{
 // (TODO? allowNumericKeys)
   if ( (s.allowUnquotedKeys)&&(JsonChars::is_quotefree(ch)) ) {
-    s.gotStart(TYPE_T::KEY_UNQUOTED);
+    Try(s.gotStart(TYPE_T::KEY_UNQUOTED));
     T_(KEY_UNQUOTED);
   }
   T_Error("Expected dict key");
@@ -233,13 +234,18 @@ void JsonState::setListener(EventListenerBase *listen) // {{{
 
 // called from START, STRICT_START, KEY_START
 // and (via epsilon) from DICT_EMPTY, ARRAY_EMPTY
-void JsonState::gotStart(type_t type) // {{{
+bool JsonState::gotStart(type_t type) // {{{
 {
   assert(!err);
   stack.push_back(type);
   if (fire) {
-    err=fire->startValue(*this,type);
+    const char *res=fire->startValue(*this,type);
+    if (res) {
+      err=res;
+      return false;
+    }
   }
+  return true;
 }
 // }}}
 
@@ -258,6 +264,7 @@ JsonState::type_t JsonState::gotValue() // {{{
 
 bool JsonState::Echar(int ch) // {{{
 {
+  // assert(ch>=0);  // esp. !=EOI
   if (err) {
     return false;
   }

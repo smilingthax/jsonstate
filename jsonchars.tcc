@@ -5,7 +5,7 @@ inline bool is_ws(int ch) {
 }
 
 inline bool is_escape(int ch) {
-  return (ch=='\\')||(ch=='"')||(ch=='\\')||(ch=='/')||
+  return (ch=='"')||(ch=='/')||(ch=='\\')||
          (ch=='b')||(ch=='f')||(ch=='n')||(ch=='r')||(ch=='t')||(ch=='u');
 }
 

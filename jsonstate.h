@@ -49,7 +49,7 @@ public:
 
 private:
   void gotStart(type_t type);
-  bool gotValue(int ch);
+  type_t gotValue();
 
   bool nextNumstate(char ch);
 

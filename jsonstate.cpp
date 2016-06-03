@@ -21,6 +21,7 @@
 #define EOI (-1)   // end-of-input  (EOF already used by stdio.h)
 
 #define T_(newState) s.state=JsonState::Trans::newState; NDBG(s.stateDebug=#newState;) return true
+#define T_Epsilon(newState) s.state=JsonState::Trans::newState; NDBG(s.stateDebug=#newState "(epsilon)";) return newState(s,ch)
 #define T_Error(e)   s.err=e; return false
 #define T_Stay       return true
 
@@ -87,7 +88,7 @@ TBool(VALUE_NUMBER, ( (JsonChars::is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')
   if ( (s.validateNumbers)&&(s.numstate!=NDONE)&&(!s.nextNumstate(0)) ) {
     T_Error("Premature end of number");
   }
-  return GOT_VALUE(s,ch); // epsilon transition, i.e. no GOT_VALUE delay
+  T_Epsilon(GOT_VALUE); // no GOT_VALUE delay
 })
 
 TSwitch(STRING, {
@@ -137,22 +138,22 @@ TSkipBool(KEY_START, (ch=='"'), {
 
 TBool(KEY_UNQUOTED, (JsonChars::is_quotefree(ch)), {
   T_Stay;
-},{
-  // TODO? synthesize '"'
-  return GOT_VALUE(s,ch); // epsilon transition  (-> KEYDONE)
-})
+},{ T_Epsilon(GOT_VALUE); }); // (-> KEYDONE)
 
 TSkipBool(DICT_EMPTY, (ch=='}'), {
   T_(GOT_VALUE);
-},{ return KEY_START(s,ch); }) // epsilon transition
+},{ T_Epsilon(KEY_START); })
 
 TSkipBool(ARRAY_EMPTY, (ch==']'), {
   T_(GOT_VALUE);
-},{ return START(s,ch); }) // epsilon transition
+},{ T_Epsilon(START); })
 
 TF(GOT_VALUE, {
-  return s.gotValue(ch); // DONE, KEYDONE, DICT_WAIT or ARRAY_WAIT -> Echar(ch) (= epsilon!)
-                         // i.e. allowed here: is_ws or : or ",}]"
+  const type_t prevType=s.gotValue();
+  if ( (prevType==TYPE_T::KEY_STRING)||(prevType==TYPE_T::KEY_UNQUOTED) ) {
+    T_Epsilon(KEYDONE); // expects ":" (or ws)
+  }
+  T_Epsilon(STACK); // expects ",}]" (or ws)
 })
 
 // the remaining states are those reached by (and only by) gotValue/Evalue
@@ -161,6 +162,23 @@ TSkipBool(KEYDONE, (ch==':'), {
   s.first=true;
   T_(START); // DICTVALUE_START
 },{ T_Error("Expected ':' after key"); })
+
+// helper: use state according to top-of-stack type (DONE/DICT_WAIT/ARRAY_WAIT)
+TF(STACK, {
+  s.first=false;
+  if (s.stack.empty()) {
+    T_Epsilon(DONE);
+  } else {
+    const type_t type=s.stack.back();
+    if (type==OBJECT) {
+      T_Epsilon(DICT_WAIT);
+    } else if (type==ARRAY) {
+      T_Epsilon(ARRAY_WAIT);
+    }
+    assert(0);
+    T_Error("Internal error");
+  }
+})
 
 TSkipSwitch(DICT_WAIT, {
 case ',': T_(KEY_START);
@@ -215,34 +233,12 @@ void JsonState::gotStart(type_t type) // {{{
 }
 // }}}
 
-static inline bool isKey(JsonState::type_t type) // {{{
-{
-  return (type==TYPE_T::KEY_STRING)||(type==TYPE_T::KEY_UNQUOTED);
-}
-// }}}
-
-bool JsonState::gotValue(int ch) // {{{
+JsonState::type_t JsonState::gotValue() // {{{
 {
   assert( (!err)&&(!stack.empty()) );
   const type_t prevType=stack.back();
   stack.pop_back();
-  if (stack.empty()) {
-    To(DONE);
-  } else if (isKey(prevType)) {
-    To(KEYDONE);
-  } else {
-    const type_t type=stack.back();
-    if (type==OBJECT) {
-      To(DICT_WAIT);
-    } else if (type==ARRAY) {
-      To(ARRAY_WAIT);
-    } else {
-      assert(0);
-      err="Internal error";
-    }
-  }
-  first=false;
-  return Echar(ch); // false if (err)
+  return prevType;
 }
 // }}}
 
@@ -285,23 +281,8 @@ bool JsonState::Evalue() // {{{
 {
   if (!err) {
     if ( In(START)||In(ARRAY_EMPTY) ) {
-      if (stack.empty()) {
-        To(DONE);
-      } else {
-        const type_t val=stack.back();
-        if (val==OBJECT) {
-          To(DICT_WAIT);
-        } else if (val==ARRAY) {
-          To(ARRAY_WAIT);
-        } else {
-          assert(0);
-          err="Internal error";
-        }
-      }
-/* basically:    [but incompatible, when gotValue fires events and calls Echar]
-      stack.push_back(VALUE);
-      gotValue();
-*/
+      // i.e.  GOT_VALUE  w/o  events    (hint: for events, could use  GOT_START(*this,' ') ...)
+      To(STACK);
     } else {
       err="Unexpected value";
     }

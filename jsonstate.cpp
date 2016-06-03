@@ -55,7 +55,7 @@ case 'n': s.gotStart(VALUE_NULL);  s.verify="ull";  T_(VALUE_VERIFY);
 },{
   if ( (ch=='-')||(JsonChars::is_digit(ch)) ) {
     s.gotStart(TYPE_T::VALUE_NUMBER);
-    if (s.validateNumbers) {
+    if ( (!s.err)&&(s.validateNumbers) ) {
       s.numstate=NSTART;
       if (!s.nextNumstate(ch)) {
         T_Error("Invalid Number");
@@ -235,9 +235,10 @@ void JsonState::setListener(EventListenerBase *listen) // {{{
 // and (via epsilon) from DICT_EMPTY, ARRAY_EMPTY
 void JsonState::gotStart(type_t type) // {{{
 {
+  assert(!err);
   stack.push_back(type);
   if (fire) {
-    fire->startValue(*this,type);
+    err=fire->startValue(*this,type);
   }
 }
 // }}}

@@ -83,7 +83,8 @@ struct JsonState::EventListenerBase { // abstract interface
   virtual ~EventListenerBase() {}
 
   // triggered before new state is entered (after stack is updated)
-  virtual void startValue(JsonState &state,JsonState::type_t type)=0;
+  // must return  nullptr  on success, otherwise (static) error message
+  virtual const char *startValue(JsonState &state,JsonState::type_t type)=0;
 
   // triggered before ending state is left (after stack is updated)
   virtual void endValue(JsonState &state,JsonState::type_t type)=0;

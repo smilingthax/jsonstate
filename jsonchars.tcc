@@ -19,5 +19,22 @@ inline bool is_hex(int ch) {
          ( (ch>='A')&&(ch<='F') );
 }
 
+inline bool is_control0(int ch) {
+  return ( (ch>=0)&&(ch<=0x1f) )||
+         (ch==0x7f);
+}
+
+inline bool is_control1(int ch) {
+  return ( (ch>=0x80)&&(ch<=0x9f) );
+}
+
+// TODO?!
+inline bool is_quotefree(int ch) {
+  return (ch=='$')||(ch=='_')||
+         ( (ch>='A')&&(ch<='Z') )||
+         ( (ch>='a')&&(ch<='z') )||
+         (ch>0x7f);   // NOTE: no numbers!
+}
+
 } // namespace JsonChars
 

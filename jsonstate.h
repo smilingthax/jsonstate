@@ -25,9 +25,11 @@ public:
   bool Evalue(); // optional shortcut for complete value
 
   // States
-  bool inWait() const;    //  either ','+Value or '}' / ']' expected next
-
+//  bool inWait() const;    //  ','+More  vs.  '}' / ']'  expected next
   bool done() const;
+  bool isFirst() const {  // true during first key(dict) / first value(array) / each value(dict)
+    return first;
+  }
   const char *error() const { // or NULL
     return err;
   }
@@ -39,7 +41,7 @@ public:
   // Types
   enum type_t {
     ARRAY, OBJECT, // only these can be 'buried' in the stack (below the latest entry)
-    VALUE_STRING, VALUE_NUMBER, VALUE_BOOL, VALUE_NULL,
+    VALUE_STRING, VALUE_NUMBER, VALUE_FALSE, VALUE_TRUE, VALUE_NULL,
     KEY_STRING,
     KEY_UNQUOTED  // extension
   };
@@ -47,7 +49,7 @@ public:
 
 private:
   void gotStart(type_t type);
-  bool gotValue();
+  bool gotValue(int ch);
 
   bool nextNumstate(char ch);
 
@@ -60,14 +62,16 @@ private:
   bool (*state)(JsonState &s,int ch);
   const char *stateDebug;
 
-  enum numstate_t {
+  bool first;
+
+  enum numstate_t {    // storage size required... (c++11 enum class?)
     NSTART, NMINUS, NNZERO, NINT, NFRAC, NFRACMORE, // NZERO already used by some xopen headers
     NEXP, NEXPONE, NEXPMORE, NDONE
   };
-  numstate_t numstate;
+  numstate_t numstate; // by Trans::VALUE_NUMBER
 
-  int validate;
-  const char *verify;
+  int validate;        // by Trans::STRING_VALIDATE_ESCAPE
+  const char *verify;  // by Trans::VALUE_VERIFY
 };
 
 #endif

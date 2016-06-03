@@ -18,6 +18,8 @@
 #define NDBG(code) code
 #endif
 
+#define EOI (-1)   // end-of-input  (EOF already used by stdio.h)
+
 #define T_(newState) s.state=JsonState::Trans::newState; NDBG(s.stateDebug=#newState;) return true
 #define T_Error(e)   s.err=e; return false
 #define T_Stay       return true
@@ -43,12 +45,12 @@
 struct JsonState::Trans { // inner class is implicit friend
 
 TSkipSwitch(START, {
-case '{': s.gotStart(OBJECT);       T_(DICT_EMPTY);
-case '[': s.gotStart(ARRAY);        T_(ARRAY_EMPTY);
+case '{': s.gotStart(OBJECT); s.first=true; T_(DICT_EMPTY);
+case '[': s.gotStart(ARRAY);  s.first=true; T_(ARRAY_EMPTY);
 case '"': s.gotStart(VALUE_STRING); T_(STRING);
-case 'f': s.gotStart(VALUE_BOOL); s.verify="alse"; T_(VALUE_VERIFY);
-case 't': s.gotStart(VALUE_BOOL); s.verify="rue";  T_(VALUE_VERIFY);
-case 'n': s.gotStart(VALUE_NULL); s.verify="ull";  T_(VALUE_VERIFY);
+case 'f': s.gotStart(VALUE_FALSE); s.verify="alse"; T_(VALUE_VERIFY);
+case 't': s.gotStart(VALUE_TRUE);  s.verify="rue";  T_(VALUE_VERIFY);
+case 'n': s.gotStart(VALUE_NULL);  s.verify="ull";  T_(VALUE_VERIFY);
 },{
   if ( (ch=='-')||(JsonChars::is_digit(ch)) ) {
     s.gotStart(TYPE_T::VALUE_NUMBER);
@@ -60,24 +62,24 @@ case 'n': s.gotStart(VALUE_NULL); s.verify="ull";  T_(VALUE_VERIFY);
     }
     T_(VALUE_NUMBER);
   }
-  T_Error("Unexpected character (not {,[,\",t,f,n,0-9)");
+  T_Error("Unexpected character (not {,[,\",t,f,n,-,0-9)");
 })
 
 TSkipSwitch(STRICT_START, {
-case '{': s.gotStart(OBJECT); T_(DICT_EMPTY);
-case '[': s.gotStart(ARRAY);  T_(ARRAY_EMPTY);
+case '{': s.gotStart(OBJECT); s.first=true; T_(DICT_EMPTY);
+case '[': s.gotStart(ARRAY);  s.first=true; T_(ARRAY_EMPTY);
 },{ T_Error("Array or Object expected"); })
 
 TBool(VALUE_VERIFY, (ch==*s.verify), {
   s.verify++;
   if (!*s.verify) {
-    return s.gotValue();
+    T_(GOT_VALUE);
   }
   T_Stay;
 },{ T_Error("Expected true/false/null keyword"); })
 
 TBool(VALUE_NUMBER, ( (JsonChars::is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')||(ch=='e')||(ch=='E') ), {
-  if ( (s.validateNumbers)&&(!s.nextNumstate(ch)) ) {
+  if ( (s.validateNumbers)&&(!s.nextNumstate(ch)) ) { // ch is ASCII, int->char is safe
     T_Error("Invalid Number");
   }
   T_Stay;
@@ -85,18 +87,24 @@ TBool(VALUE_NUMBER, ( (JsonChars::is_digit(ch))||(ch=='.')||(ch=='+')||(ch=='-')
   if ( (s.validateNumbers)&&(s.numstate!=NDONE)&&(!s.nextNumstate(0)) ) {
     T_Error("Premature end of number");
   }
-  // epsilon transition - TODO?
-  return (s.gotValue())&& // DONE, DICT_WAIT or ARRAY_WAIT now
-         (s.Echar(ch));   // allowed next: is_ws or ",}]"
+  return GOT_VALUE(s,ch); // epsilon transition, i.e. no GOT_VALUE delay
 })
 
 TSwitch(STRING, {
 case '\\': T_(STRING_ESCAPE);
-case '"':  return s.gotValue();
-},{ T_Stay; }) // TODO? check for valid chars?
+case '"':  T_(GOT_VALUE);
+case EOI:  T_Error("Unexpected end while reading quoted string"); // TODO? error output: skip back to where string started?
+},{
+  if (JsonChars::is_control0(ch)) {
+    T_Error("Raw control characters are not allowed in quoted string");
+  }
+  T_Stay;
+})
 
 TF(STRING_ESCAPE, {
-  if (s.validateEscapes) {
+  if (ch==EOI) {
+    T_Error("Unexpected end while processing \\ in quoted string");
+  } else if (s.validateEscapes) {
     if (ch=='u') {
       s.validate=4;
       T_(STRING_VALIDATE_ESCAPE);
@@ -118,61 +126,67 @@ TBool(STRING_VALIDATE_ESCAPE, (JsonChars::is_hex(ch)), {
 TSkipBool(KEY_START, (ch=='"'), {
   s.gotStart(KEY_STRING);
   T_(STRING);
-// (TODO? allowNumericKeys)
 },{
-  if (s.allowUnquotedKeys) {
+// (TODO? allowNumericKeys)
+  if ( (s.allowUnquotedKeys)&&(JsonChars::is_quotefree(ch)) ) {
     s.gotStart(TYPE_T::KEY_UNQUOTED);
     T_(KEY_UNQUOTED);
   }
   T_Error("Expected dict key");
 })
 
-TBool(KEY_UNQUOTED, ( (JsonChars::is_ws(ch))||(ch==':') ), {
-  // TODO? synthesize '"'
-  return s.gotValue();
-},{
-  if (ch=='\\') {
-    // BAD... TODO? synthesize another '\\'
-    T_Error("Bad unquoted key");
-  }
+TBool(KEY_UNQUOTED, (JsonChars::is_quotefree(ch)), {
   T_Stay;
+},{
+  // TODO? synthesize '"'
+  return GOT_VALUE(s,ch); // epsilon transition  (-> KEYDONE)
 })
 
-TSkipBool(KEYDONE, (ch==':'), {
-  T_(START); // DICTVALUE_START
-},{ T_Error("Expected ':' after key"); })
-
 TSkipBool(DICT_EMPTY, (ch=='}'), {
-  return s.gotValue();
+  T_(GOT_VALUE);
 },{ return KEY_START(s,ch); }) // epsilon transition
 
 TSkipBool(ARRAY_EMPTY, (ch==']'), {
-  return s.gotValue();
+  T_(GOT_VALUE);
 },{ return START(s,ch); }) // epsilon transition
+
+TF(GOT_VALUE, {
+  return s.gotValue(ch); // DONE, KEYDONE, DICT_WAIT or ARRAY_WAIT -> Echar(ch) (= epsilon!)
+                         // i.e. allowed here: is_ws or : or ",}]"
+})
+
+// the remaining states are those reached by (and only by) gotValue/Evalue
+
+TSkipBool(KEYDONE, (ch==':'), {
+  s.first=true;
+  T_(START); // DICTVALUE_START
+},{ T_Error("Expected ':' after key"); })
 
 TSkipSwitch(DICT_WAIT, {
 case ',': T_(KEY_START);
-case '}': return s.gotValue();
+case '}': T_(GOT_VALUE);
 },{ T_Error("Expected ',' or '}'"); }) // "instead of [ch]"
 
 TSkipSwitch(ARRAY_WAIT, {
 case ',': T_(START);
-case ']': return s.gotValue();
+case ']': T_(GOT_VALUE);
 },{ T_Error("Expected ',' or ']'"); })
 
-TSkipBool(DONE, (true), {
-  T_Error("Trailing character");
-},{ })
+TSkipBool(DONE, (ch==EOI), {
+  T_Stay;
+},{ T_Error("Trailing character"); });
 
 }; // struct JsonState::Trans
 
 #define To(newState) state=JsonState::Trans::newState; NDBG(stateDebug=#newState)
 #define In(otherState) (state==JsonState::Trans::otherState)
 
+/* FIXME   epsilons from GOT_VALUE...
 bool JsonState::inWait() const
 {
   return (!err)&&( In(DICT_WAIT)||In(ARRAY_WAIT) );
 }
+*/
 
 bool JsonState::done() const
 {
@@ -188,10 +202,13 @@ void JsonState::reset(bool strictStart) // {{{
   } else {
     To(START);
   }
+  first=true;
 }
 // }}}
 
 
+// called from START, STRICT_START, KEY_START
+// and (via epsilon) from DICT_EMPTY, ARRAY_EMPTY
 void JsonState::gotStart(type_t type) // {{{
 {
   stack.push_back(type);
@@ -204,27 +221,28 @@ static inline bool isKey(JsonState::type_t type) // {{{
 }
 // }}}
 
-bool JsonState::gotValue() // {{{
+bool JsonState::gotValue(int ch) // {{{
 {
   assert( (!err)&&(!stack.empty()) );
-  const type_t oldVal=stack.back();
+  const type_t prevType=stack.back();
   stack.pop_back();
   if (stack.empty()) {
     To(DONE);
-  } else if (isKey(oldVal)) {
+  } else if (isKey(prevType)) {
     To(KEYDONE);
   } else {
-    const type_t val=stack.back();
-    if (val==OBJECT) {
+    const type_t type=stack.back();
+    if (type==OBJECT) {
       To(DICT_WAIT);
-    } else if (val==ARRAY) {
+    } else if (type==ARRAY) {
       To(ARRAY_WAIT);
     } else {
       assert(0);
       err="Internal error";
     }
   }
-  return (!err);
+  first=false;
+  return Echar(ch); // false if (err)
 }
 // }}}
 
@@ -242,7 +260,7 @@ bool JsonState::Echar(int ch) // {{{
 
 bool JsonState::Eend() // {{{
 {
-  if ( (!err)&&(Echar(' '))&&(!In(DONE)) ) { // TODO? ' ' produces "better" error message (but is not recoverable)
+  if ( (!err)&&(Echar(EOI))&&(!In(DONE)) ) {
     err="Premature end of input";
   }
   return (!err);
@@ -258,6 +276,7 @@ bool JsonState::Ekey() // {{{
       err="Unexpected key";
     }
   }
+  first=false;
   return (!err);
 }
 // }}}
@@ -279,7 +298,7 @@ bool JsonState::Evalue() // {{{
           err="Internal error";
         }
       }
-/* basically:    [but incompatible, when gotValue fires events]
+/* basically:    [but incompatible, when gotValue fires events and calls Echar]
       stack.push_back(VALUE);
       gotValue();
 */
@@ -287,6 +306,7 @@ bool JsonState::Evalue() // {{{
       err="Unexpected value";
     }
   }
+  first=false;
   return (!err);
 }
 // }}}
@@ -338,7 +358,10 @@ bool JsonState::nextNumstate(char ch) // {{{
 
 const char *JsonState::typeName(JsonState::type_t type) // {{{
 {
-  static const char *type2str[]={"ARRAY", "OBJECT", "VALUE_STRING", "VALUE_NUMBER", "VALUE_BOOL", "VALUE_NULL", "KEY_STRING", "KEY_UNQUOTED"};
+  static const char *type2str[]={
+    "ARRAY", "OBJECT",
+    "VALUE_STRING", "VALUE_NUMBER", "VALUE_FALSE", "VALUE_TRUE", "VALUE_NULL",
+    "KEY_STRING", "KEY_UNQUOTED"};
   return type2str[type];
 }
 // }}}

@@ -21,7 +21,7 @@ inline bool is_hex(int ch) {
 
 inline bool is_control0(int ch) {
   return ( (ch>=0)&&(ch<=0x1f) )||
-         (ch==0x7f);
+         (ch==0x7f); // del / backspace (addition)
 }
 
 inline bool is_control1(int ch) {

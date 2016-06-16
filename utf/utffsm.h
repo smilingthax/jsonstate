@@ -6,7 +6,7 @@ enum { ErrorBit=0x01000000, EndOfInput=-1 };
     // TODO? or:  out(int ch,bool error) ??
 
 template <typename Output,bool initialActive=true>
-struct Bypass {
+struct Bypass {  // bool out(int ch)
   Bypass(Output out) : out(out),active(initialActive) {}
 
   void reset(bool _active) {  // =initialActive ?

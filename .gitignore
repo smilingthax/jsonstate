@@ -1,6 +1,7 @@
 *.d
 *.o
 tst_jsonstate
+test_unescape
 tests/*.json
 tests/test
 utf/test_*

@@ -1,11 +1,14 @@
-SOURCES=main.cpp jsonstate.cpp
-EXEC=tst_jsonstate
+SOURCES=jsonstate.cpp jsonparser.cpp  main.cpp
+EXEC=tst_jsonstate test_unescape
 
 #CFLAGS=-O3 -funroll-all-loops -finline-functions -Wall -g
 CFLAGS=-Wall -g
 CXXFLAGS=-std=c++11
 CPPFLAGS=$(CFLAGS) $(FLAGS)
 PACKAGES=
+
+CPPFLAGS+=-Idouble-conversion/include
+LDFLAGS+=-Ldouble-conversion -ldouble-conversion -Wl,-rpath=double-conversion
 
 #CPPFLAGS+=$(shell pkg-config --cflags $(PACKAGES))
 #LDFLAGS+=$(shell pkg-config --libs $(PACKAGES))
@@ -36,5 +39,9 @@ clean:
                       | sed '\''s/\($*\)\.o[ :]*/\1.o $@ : /g'\'' > $@;\
                       [ -s $@ ] || rm -f $@'
 
-$(EXEC): $(OBJECTS)
+tst_jsonstate: main.o jsonstate.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
+
+test_unescape: test_unescape.cpp jsunescape.tcc
+	$(CXX) -o $@ $(CPPFLAGS) $(CXXFLAGS) $<
+

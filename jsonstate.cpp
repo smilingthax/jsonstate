@@ -149,6 +149,7 @@ TSkipBool(ARRAY_EMPTY, (ch==']'), {
   T_(GOT_VALUE);
 },{ T_Epsilon(START); })
 
+// makes events fire only AFTER all chars of a value are processed
 TF(GOT_VALUE, {
   const type_t prevType=s.gotValue();
   if ( (prevType==TYPE_T::KEY_STRING)||(prevType==TYPE_T::KEY_UNQUOTED) ) {

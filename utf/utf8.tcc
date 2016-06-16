@@ -163,4 +163,17 @@ bool writeUtf8(Output out,int ch) { // {{{
 }
 // }}}
 
+template <typename Output> // void out(start,end)
+struct Utf8Writer {
+  Utf8Writer(Output out) : out(out) {}
+
+  bool operator()(int ch) {
+    // TODO/FIXME: handle  (ch&ErrorBit)  ,  handle (ch==EndOfInput)        [currently: return false...(via out-of-range)]
+    return writeUtf8<Output&>(out,ch);
+  }
+
+private:
+  Output out;
+};
+
 } // namespace UtfFsm

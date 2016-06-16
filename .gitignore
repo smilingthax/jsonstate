@@ -3,3 +3,5 @@
 tst_jsonstate
 tests/*.json
 tests/test
+utf/test_*
+!utf/test_*.cpp

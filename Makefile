@@ -1,5 +1,5 @@
-SOURCES=jsonstate.cpp jsonparser.cpp  main.cpp
-EXEC=tst_jsonstate test_unescape
+SOURCES=jsonstate.cpp jsonparser.cpp jsonwriter.cpp  main.cpp parse.cpp
+EXEC=tst_jsonstate parse test_unescape
 
 #CFLAGS=-O3 -funroll-all-loops -finline-functions -Wall -g
 CFLAGS=-Wall -g
@@ -40,6 +40,9 @@ clean:
                       [ -s $@ ] || rm -f $@'
 
 tst_jsonstate: main.o jsonstate.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+parse: parse.o jsonstate.o jsonparser.o jsonwriter.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 test_unescape: test_unescape.cpp jsunescape.tcc

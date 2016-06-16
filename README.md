@@ -3,7 +3,7 @@ jsonstate
 
 JSON state tracker, e.g. when validating JSON.
 
-JsonParser requires: https://github.com/google/double-conversion
+JsonParser/JsonWriter requires: https://github.com/google/double-conversion
 
 Copyright (c) 2016 Tobias Hoffmann
 

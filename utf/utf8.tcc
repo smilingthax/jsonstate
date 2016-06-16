@@ -151,13 +151,13 @@ bool writeUtf8(Output out,int ch) { // {{{
   if (ch<0) {
     return false;
   } else if (ch<=0x7f) {
-    return writeUtf8(out,ch,1);
+    return writeUtf8<Output&>(out,ch,1);
   } else if (ch<=0x7ff) {
-    return writeUtf8(out,ch,2);
+    return writeUtf8<Output&>(out,ch,2);
   } else if (ch<=0xffff) {
-    return writeUtf8(out,ch,3);
+    return writeUtf8<Output&>(out,ch,3);
   } else if (ch<=0x10ffff) {
-    return writeUtf8(out,ch,4);
+    return writeUtf8<Output&>(out,ch,4);
   }
   return false; // too large
 }
@@ -168,6 +168,9 @@ struct Utf8Writer {
   Utf8Writer(Output out) : out(out) {}
 
   bool operator()(int ch) {
+    if (ch==EndOfInput) {
+      return true;
+    }
     // TODO/FIXME: handle  (ch&ErrorBit)  ,  handle (ch==EndOfInput)        [currently: return false...(via out-of-range)]
     return writeUtf8<Output&>(out,ch);
   }

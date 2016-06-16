@@ -57,7 +57,9 @@ void latin1segmenter(Segments seg,const char *start,const char *end) // {{{
 }
 // }}}
 
-static inline int scan_one_utf8(const char *&pos,const char *end) // {{{
+// To be called on bytes with 0x80 set.
+// NOTE: end==nullptr can be used with \0 termination
+static inline int scan_one_utf8(const char *&pos,const char *end=0) // {{{
 {
   const unsigned char ch0=*pos;
   ++pos;

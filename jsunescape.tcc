@@ -31,7 +31,7 @@ struct JsUnescapeFSM {
         return true;
       }
       state=SEEK;
-      if ( (ch==UtfFsm::EndOfInput)||((ch&ErrorBit)==0) ) {
+      if ( (ch!=UtfFsm::EndOfInput)&&((ch&ErrorBit)==0) ) {
         const int res=shortCodes(ch);
         if (res) {
           return outSurrogate(res);

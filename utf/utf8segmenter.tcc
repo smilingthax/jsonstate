@@ -1,7 +1,7 @@
 
 /*
 template <typename Output>
-struct SegmenterInterface {
+struct SegmenterInterface { // "latin1"
   // SegmenterInterface(Output out) : out(out) {}
 
   bool mustEscape(char ch) {
@@ -21,20 +21,22 @@ protected:
 template <typename Output>
 struct Utf8SegmenterInterface : SegmenterInterface<Output> {
   void writeUtf8(int ch,const char *start,const char *end) {
+    // ch contains the parsed utf8 value, [start;end) the unparsed bytes
     // ? ... check overlong / inRange / ... ?
     // ? ... mustEscape?
     // ... out(...)
   }
   bool error(const char *start,const char *end) {
-    // contains only bytes with high byte set
+    // [start;end) will contain only bytes with high byte set
     // if a start-sequence is included, it begins at *start;
-    // it can only be too short when end came first
+    // it can only be too short when end came first/early
     return true;
   }
 };
 */
 
 // esp. included to facilitate understanding
+// calls into Segments (SegmenterInterface)
 template <typename Segments>
 void latin1segmenter(Segments seg,const char *start,const char *end) // {{{
 {
@@ -90,6 +92,7 @@ static inline int scan_one_utf8(const char *&pos,const char *end=0) // {{{
 }
 // }}}
 
+// calls into Segments (Utf8SegmenterInterface) for each codepoint
 template <typename Segments>
 bool utf8segmenter(Segments seg,const char *start,const char *end) // {{{
 {
@@ -170,11 +173,14 @@ private:
   struct SegWrap {
     SegWrap(Segments seg) : seg(seg),pos(0) {}
 
+    // forward these to the original Segmenter interface
     bool mustEscape(char ch) { return seg.mustEscape(ch); }
     void writeEscape(char ch) { seg.writeEscape(ch); }
     void write(const char *start,const char *end) { seg.write(start,end); }
     void writeUtf8(int ch,const char *start,const char *end) { seg.writeUtf8(ch,start,end); }
 
+    // catch incomplete sequences at the end of the current data block
+    // and save it for the next invocation (instead of erroring out)
     bool error(const char *start,const char *end) { // {{{
       if (end==curEnd) {
         // assert(end); assert(!pos);

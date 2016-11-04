@@ -46,6 +46,9 @@
 
 struct JsonState::Trans { // inner class is implicit friend
 
+// Invariant: a state fires only once, or it does not fire at all
+//            [gotStart, GOT_VALUE fire]
+
 TSkipSwitch(START, {
 case '{': Try(s.gotStart(OBJECT)); s.first=true; T_(DICT_EMPTY);
 case '[': Try(s.gotStart(ARRAY));  s.first=true; T_(ARRAY_EMPTY);
@@ -149,16 +152,23 @@ TSkipBool(ARRAY_EMPTY, (ch==']'), {
   T_(GOT_VALUE);
 },{ T_Epsilon(START); })
 
+static inline bool isKey(JsonState::type_t type) // {{{
+{
+  return (type==TYPE_T::KEY_STRING)||(type==TYPE_T::KEY_UNQUOTED);
+}
+// }}}
+
 // makes events fire only AFTER all chars of a value are processed
 TF(GOT_VALUE, {
-  const type_t prevType=s.gotValue();
-  if ( (prevType==TYPE_T::KEY_STRING)||(prevType==TYPE_T::KEY_UNQUOTED) ) {
+  const type_t prevType=s.gotValue(); // fires
+  if (isKey(prevType)) {
     T_Epsilon(KEYDONE); // expects ":" (or ws)
   }
   T_Epsilon(STACK); // expects ",}]" (or ws)
 })
 
-// the remaining states are those reached by (and only by) gotValue/Evalue
+// The remaining states are those reached by (and only by) gotValue/Evalue
+// these (and any T_Epsilon!) *must not* fire, as GOT_VALUE already has fired
 
 TSkipBool(KEYDONE, (ch==':'), {
   s.first=true;
@@ -250,6 +260,7 @@ bool JsonState::gotStart(type_t type) // {{{
 }
 // }}}
 
+// only called via GOT_VALUE
 JsonState::type_t JsonState::gotValue() // {{{
 {
   assert( (!err)&&(!stack.empty()) );

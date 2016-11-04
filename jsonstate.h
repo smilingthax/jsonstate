@@ -20,7 +20,8 @@ public:
   bool validateNumbers;
 
   struct EventListenerBase;
-  void setListener(EventListenerBase *elb); // or NULL
+  void setListener(EventListenerBase *elb); // or NULL   - does not take ownership
+  // NOTE: any Event (Echar, ...) will trigger the listener only once (or not at all)
 
   // Events
   bool Echar(int ch); // false on error

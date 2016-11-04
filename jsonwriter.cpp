@@ -13,25 +13,35 @@
 
 void JBWriterBase::startArray() // {{{
 {
+  addSeparator();
   write("[",1);
+  first=true;
 }
 // }}}
 
 void JBWriterBase::startObject() // {{{
 {
+  addSeparator();
   write("{",1);
+  first=true;
 }
 // }}}
 
 void JBWriterBase::endArray() // {{{
 {
+  first=true; // supress colon
+  addSeparator(); // but add final indent (PrettyWriter)
   write("]",1);
+  // first=false; (by addSeparator())
 }
 // }}}
 
 void JBWriterBase::endObject() // {{{
 {
+  first=true; // supress colon
+  addSeparator(); // but add final indent (PrettyWriter)
   write("}",1);
+  // first=false; (by addSeparator())
 }
 // }}}
 
@@ -95,8 +105,17 @@ struct JBWriterBase::Writer {
   JBWriterBase &parent;
 };
 
+void JBWriterBase::stringKey(const char *start, const char *end) // {{{
+{
+  stringValue(start,end);
+  write(":",1);
+  first=true;
+}
+// }}}
+
 void JBWriterBase::stringValue(const char *start, const char *end) // {{{
 {
+  addSeparator();
   write("\"",1);
   if (!utf8segmenter(JsonSegmenter<Writer>(*this),start,end)) {
     assert(false); // TODO ...
@@ -108,6 +127,7 @@ void JBWriterBase::stringValue(const char *start, const char *end) // {{{
 // NOTE: unchecked
 void JBWriterBase::numericValue(const char *start, const char *end) // {{{
 {
+  addSeparator();
   write(start,end-start);
 }
 // }}}
@@ -154,6 +174,7 @@ void JBWriterBase::numericValue(double value) // {{{
 
 void JBWriterBase::boolValue(bool value) // {{{
 {
+  addSeparator();
   if (value) {
     write("true",4);
   } else {
@@ -164,14 +185,15 @@ void JBWriterBase::boolValue(bool value) // {{{
 
 void JBWriterBase::nullValue() // {{{
 {
+  addSeparator();
   write("null",4);
 }
 // }}}
 
-void JBWriterBase::separator(bool key) // {{{
+void JBWriterBase::addSeparator() // {{{
 {
-  if (key) {
-    write(":",1);
+  if (first) {
+    first=false;
   } else {
     write(",",1);
   }
@@ -183,7 +205,7 @@ JBPrettyWriter::JBPrettyWriter(int indentAmount,char indentChar)
   : indentChar(indentChar),
     indentAmount(indentAmount),
     indent(1,'\n'),
-    skipIndent(false),
+    isKey(false),
     veryFirst(true)
 {
   assert(JsonChars::is_ws(indentChar));
@@ -191,7 +213,6 @@ JBPrettyWriter::JBPrettyWriter(int indentAmount,char indentChar)
 
 void JBPrettyWriter::startArray() // {{{
 {
-  writeIndent();
   JBWriterBase::startArray();
   pushIndent();
 }
@@ -199,7 +220,6 @@ void JBPrettyWriter::startArray() // {{{
 
 void JBPrettyWriter::startObject() // {{{
 {
-  writeIndent();
   JBWriterBase::startObject();
   pushIndent();
 }
@@ -208,59 +228,23 @@ void JBPrettyWriter::startObject() // {{{
 void JBPrettyWriter::endArray() // {{{
 {
   popIndent();
-  writeIndent();
-  JBWriterBase::endArray();
+  JBWriterBase::endArray(); // will call addSeparator w/ first=false
 }
 // }}}
 
 void JBPrettyWriter::endObject() // {{{
 {
   popIndent();
-  writeIndent();
-  JBWriterBase::endObject();
+  JBWriterBase::endObject(); // will call addSeparator w/ first=false
 }
 // }}}
 
-void JBPrettyWriter::stringValue(const char *start, const char *end) // {{{
+void JBPrettyWriter::stringKey(const char *start, const char *end) // {{{
 {
-  writeIndent();
-  JBWriterBase::stringValue(start,end);
+  stringValue(start,end);
+  isKey=true; // track separately from first (unlike JSWriterBase!)
 }
 // }}}
-
-void JBPrettyWriter::numericValue(const char *start, const char *end) // {{{
-{
-  writeIndent();
-  JBWriterBase::numericValue(start,end);
-}
-// }}}
-
-void JBPrettyWriter::boolValue(bool value) // {{{
-{
-  writeIndent();
-  JBWriterBase::boolValue(value);
-}
-// }}}
-
-void JBPrettyWriter::nullValue() // {{{
-{
-  writeIndent();
-  JBWriterBase::nullValue();
-}
-// }}}
-
-void JBPrettyWriter::separator(bool key) // {{{
-{
-  if (key) {
-    write(": ",2);
-    skipIndent=true;
-  } else {
-    JBWriterBase::separator(false);
-    // writeIndent(); skipIndent=true;  ?
-  }
-}
-// }}}
-
 
 inline void JBPrettyWriter::pushIndent() // {{{
 {
@@ -270,17 +254,28 @@ inline void JBPrettyWriter::pushIndent() // {{{
 
 inline void JBPrettyWriter::popIndent() // {{{
 {
+  assert(!isKey);
   assert(indent.size()-indentAmount>=1);
   indent.resize(indent.size()-indentAmount);
 }
 // }}}
 
-inline void JBPrettyWriter::writeIndent() // {{{
+inline void JBPrettyWriter::addSeparator() // {{{
 {
-  if (skipIndent) {
-    skipIndent=false;
-    // veryFirst=false; ?
-  } else if (veryFirst) {
+  if (isKey) {
+    // assert(!veryFirst);
+    write(": ",2);
+    isKey=false;
+    return; // no indent!
+  }
+  if (!first) {
+    // assert(!veryFirst);
+    write(",",1);
+  } else {
+    first=false;
+  }
+  // write indent
+  if (veryFirst) {
     write(indent.data()+1,indent.size()-1); // without '\n'
     veryFirst=false;
   } else {

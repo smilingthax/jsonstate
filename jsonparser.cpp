@@ -29,15 +29,24 @@ static double parseDouble(const char *start, const char *end) // {{{
 #include <string>
 
 // TODO? ... unquoted_key currently mostly ignored wrt. output
-static void stringValue(JsonBuilderBase &dst,const std::string &str,bool unquoted_key=false) // {{{
+static void stringKey(JsonBuilderBase &dst,const std::string &str,bool unquoted_key=false) // {{{
 {
   const char *cstr=str.c_str();
   if (unquoted_key) {
-    dst.stringValue(cstr,cstr+str.size());
+    dst.stringKey(cstr,cstr+str.size());
   } else { // remove quotes
     assert(str.size()>=2); // TODO?!
-    dst.stringValue(cstr+1,cstr+str.size()-1);
+    dst.stringKey(cstr+1,cstr+str.size()-1);
   }
+}
+// }}}
+
+static void stringValue(JsonBuilderBase &dst,const std::string &str) // {{{
+{
+  const char *cstr=str.c_str();
+  // remove quotes
+  assert(str.size()>=2); // TODO?!
+  dst.stringValue(cstr+1,cstr+str.size()-1);
 }
 // }}}
 
@@ -135,9 +144,6 @@ const std::string &JPListener::endCollect() // {{{
 
 const char *JPListener::startValue(JsonState &state,JsonState::type_t type) // {{{
 {
-  if (!state.isFirst()) {
-    dst.separator(false);
-  }
   switch (type) {
   case JsonState::ARRAY:
     dst.startArray();
@@ -176,12 +182,10 @@ void JPListener::endValue(JsonState &state,JsonState::type_t type) // {{{
     dst.endObject();
     break;
   case JsonState::KEY_UNQUOTED:
-    stringValue(dst,endCollect(),true);
-    dst.separator(true);
+    stringKey(dst,endCollect(),true);
     break;
   case JsonState::KEY_STRING:
-    stringValue(dst,endCollect());
-    dst.separator(true);
+    stringKey(dst,endCollect());
     break;
   case JsonState::VALUE_STRING:
     stringValue(dst,endCollect());

@@ -10,22 +10,27 @@
 
 class JBWriterBase : public JsonBuilderBase {
 public:
+  JBWriterBase() : first(true) {}
+
   void startArray() override;
   void startObject() override;
   void endArray() override;
   void endObject() override;
 
+  void stringKey(const char *start, const char *end) override;
   void stringValue(const char *start, const char *end) override;
   void numericValue(const char *start, const char *end) override;
   void numericValue(double value) override; // forwards after stringify
   void numericValue(int32_t value) override; // forwards to (start,end)
   void boolValue(bool value) override;
   void nullValue() override;
-
-  void separator(bool key) override;
 protected:
   virtual void write(const char *str,size_t len) =0;
+  virtual void addSeparator();
+
   struct Writer; // in c++11 this would be a lambda / std::bind
+
+  bool first; // used by addSeparator
 };
 
 #include <string>
@@ -39,22 +44,17 @@ public:
   void endArray() override;
   void endObject() override;
 
-  void stringValue(const char *start, const char *end) override;
-  void numericValue(const char *start, const char *end) override;
-  void boolValue(bool value) override;
-  void nullValue() override;
-
-  void separator(bool key) override;
+  void stringKey(const char *start, const char *end) override;
 private:
   void pushIndent();
   void popIndent();
-  void writeIndent();
+  void addSeparator() override;
 private:
   char indentChar;
   int indentAmount;
 
   std::string indent;
-  bool skipIndent;
+  bool isKey;
   bool veryFirst;
 };
 

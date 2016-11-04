@@ -3,9 +3,10 @@
 
 #include "jsonbuilderbase.h"
 #include "jsonstate.h"
+#include "utf/utffsm.h"
 
 struct JPListener;
-class JsonParser {
+class JsonParser { // push-type interface
 public:
   JsonParser(JsonBuilderBase &builder);
   ~JsonParser();
@@ -26,13 +27,27 @@ public:
   bool next(int ch);
   const char *end(); // error or nullptr
 
+  // FSM-type interface
+  bool operator()(int ch) {
+    if (ch==UtfFsm::EndOfInput) { // end of input
+      return (end()==0); // nullptr
+    }
+    return next(ch);
+  }
+  const char *error() {
+    if (err) {
+      return err;
+    }
+    return state.error();
+  }
+
 private:
   JsonState state;
 
   friend struct JPListener;
 //  std::unique_ptr<JPListener> jpl;  // FIXME c++11 only
   JPListener *jpl;
-  const char *error;
+  const char *err;
 
   JsonParser(const JsonParser &);  // =delete;
   JsonParser &operator=(const JsonParser&); // =delete;

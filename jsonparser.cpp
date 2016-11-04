@@ -118,13 +118,13 @@ void JPListener::next(int ch) // {{{
 {
   if (limit!=0) { // collecting
     if ( (appender.collect.size()>=(unsigned int)limit) ) {
-      parent.error="Limit reached";
+      parent.err="Limit reached";
       limit=0; // stop collecting ...
       return;
     }
     assert( (ch>=0)&&(ch<0x110000) );
     if (!escaper(ch)) {
-      parent.error="Bad escape sequence";
+      parent.err="Bad escape sequence";
     }
   }
 }
@@ -212,7 +212,7 @@ JsonParser::JsonParser(JsonBuilderBase &builder)
     keyLimit(256),
     stringLimit(-1),
     numberLimit(20),
-    error(nullptr)
+    err(nullptr)
 {
 //  state.reset(true);  // FIXME... config from where?
   state.validateNumbers=true; // parseNumber/parseDouble   depends on it!
@@ -230,7 +230,7 @@ JsonParser::~JsonParser()
 
 void JsonParser::reset()
 {
-  error=nullptr;
+  err=nullptr;
   state.reset(); // (false) / (true) ...
 }
 
@@ -249,13 +249,13 @@ bool JsonParser::next(int ch)
     return false;
   }
   jpl->next(ch);
-  return (!error);
+  return (!err);
 }
 
 const char *JsonParser::end() // {{{
 {
-  if (error) {
-    return error;
+  if (err) {
+    return err;
   }
   if (!state.Eend()) {
     return state.error();

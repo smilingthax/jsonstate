@@ -2,7 +2,7 @@
 #include "jsonparser.h"
 #include "jsonfilewriter.h"
 
-#include "utf/utf8segmenter.tcc"
+#include "utf/utf8scan.tcc"
 
 int main(int argc,char **argv)
 {
@@ -17,21 +17,22 @@ int main(int argc,char **argv)
   JsonParser parser(writer);
 
   int pos;
-  for (pos=0; *str; str++,pos++) {  // TODO... better utf8?
+  for (pos=0; *str; pos++) {  // TODO... better utf8?
     if (*str&0x80) {
       const int res=scan_one_utf8(str);
       if ( (res<0)||(!parser.next(res)) ) {
         break;
       }
-      str--; // already at next char
     } else if (!parser.next(*str)) {
       break;
+    } else {
+      str++;
     }
   }
 
   const char *err=parser.end();
   printf("\n");
-  if (err) { // FIXME: not utf8 safe ...
+  if (err) { // FIXME: not utf8 safe ...      - reverse utf8 scan ?
     fprintf(stderr,"Json error at %d: %s\n",pos,err);
     const int prelen=std::min(str-argv[1],20);
     fprintf(stderr,"Context: '%.*s'\n",prelen+20,str-prelen);

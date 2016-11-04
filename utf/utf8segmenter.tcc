@@ -59,38 +59,7 @@ void latin1segmenter(Segments seg,const char *start,const char *end) // {{{
 }
 // }}}
 
-// To be called on bytes with 0x80 set.
-// NOTE: end==nullptr can be used with \0 termination
-static inline int scan_one_utf8(const char *&pos,const char *end=0) // {{{
-{
-  const unsigned char ch0=*pos;
-  ++pos;
-  if ( ((ch0&0xc0)!=0xc0)||
-       (pos==end)||((*pos&0xc0)!=0x80) ) {
-    return -1;
-  }
-  int val=*pos&0x3f;
-  ++pos;
-  if ((ch0&0x20)==0) { // len 2
-    val=((ch0&0x1f)<<6) | val;
-  } else if ( (pos==end)||((*pos&0xc0)!=0x80) ) {
-    return -1;
-  } else { // len >=3
-    val=((ch0&0xf)<<6) | val;
-    val=(val<<6) | (*pos&0x3f);
-    ++pos;
-    if (ch0&0x10) { // len>=4
-      if ( (ch0&0x08)||
-           (pos==end)||((*pos&0xc0)!=0x80) ) {
-        return -1;
-      }
-      val=(val<<6)|(*pos&0x3f);
-      ++pos;
-    }
-  }
-  return val;
-}
-// }}}
+#include "utf8scan.tcc"
 
 // calls into Segments (Utf8SegmenterInterface) for each codepoint
 template <typename Segments>
@@ -109,11 +78,7 @@ bool utf8segmenter(Segments seg,const char *start,const char *end) // {{{
         seg.writeUtf8(val,start,pos);
         start=pos;
       } else { // error
-        for (; pos!=end; ++pos) { // skip to next sync
-          if ( ((*pos&0x80)==0)||(*pos&0x40) ) {
-            break;
-          }
-        }
+        pos=next_utf8_boundary(pos,end); // skip to next sync
         if (seg.error(start,pos)) {
           return false;
         }

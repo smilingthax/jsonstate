@@ -118,7 +118,7 @@ TF(STRING_ESCAPE, {
     } // else: fall through
   }
   T_(STRING);
-});
+})
 
 TBool(STRING_VALIDATE_ESCAPE, (JsonChars::is_hex(ch)), {
   s.validate--;

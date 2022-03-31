@@ -34,7 +34,7 @@ int main(int argc,char **argv)
   printf("\n");
   if (err) { // FIXME: not utf8 safe ...      - reverse utf8 scan ?
     fprintf(stderr,"Json error at %d: %s\n",pos,err);
-    const int prelen=std::min(str-argv[1],20);
+    const int prelen=std::min<ptrdiff_t>(str-argv[1],20);
     fprintf(stderr,"Context: '%.*s'\n",prelen+20,str-prelen);
     fprintf(stderr,"      %s----^\n",std::string(prelen,' ').c_str());
     return 1;

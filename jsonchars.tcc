@@ -20,8 +20,7 @@ inline bool is_hex(int ch) {
 }
 
 inline bool is_control0(int ch) {
-  return ( (ch>=0)&&(ch<=0x1f) )||
-         (ch==0x7f); // del / backspace (addition)
+  return ( (ch>=0)&&(ch<=0x1f) );   // NOTE: ECMA spec is clear, that 0x7f is ALLOWED in json despite it being ctrl0!
 }
 
 inline bool is_control1(int ch) {
